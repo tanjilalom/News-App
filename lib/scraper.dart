@@ -24,24 +24,24 @@ class _QuotesScreenState extends State<QuotesScreen> {
 
 
   //bypass SSL validation
-  HttpClient getCustomHttpClient() {
-    final httpClient = HttpClient()
-      ..badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true;
-    return httpClient;
-  }
+  // HttpClient getCustomHttpClient() {
+  //   final httpClient = HttpClient()
+  //     ..badCertificateCallback =
+  //         (X509Certificate cert, String host, int port) => true;
+  //   return httpClient;
+  // }
 
   Future<void> fetchQuotes() async {
     // const url = 'http://quotes.toscrape.com';
-    final url = 'https://www.techlandbd.com/pc-components/processor';
+    const url = 'https://www.techlandbd.com/pc-components/processor';
 
     try {
 
-      final ioClient = IOClient(getCustomHttpClient());
-      final response = await ioClient.get(Uri.parse(url));
+      //final ioClient = IOClient(getCustomHttpClient());
+      // final response = await ioClient.get(Uri.parse(url));
 
 
-      //final response = await http.get(Uri.parse(url));
+      final response = await http.get(Uri.parse(url));
 
 
       if (response.statusCode == 200) {
