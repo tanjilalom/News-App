@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart';
 
@@ -64,6 +65,7 @@ Future<Map<String, dynamic>> fetchRSS(String url) async {
 
       final channelTitle =
           document.querySelector('channel > title')?.text ?? 'Unknown Channel';
+
       final items = document.querySelectorAll('item').map((e) {
         final title = e.querySelector('title')?.text ?? 'No Title';
         final pubDate = e.querySelector('pubDate')?.text ?? 'No Date';
@@ -85,5 +87,49 @@ Future<Map<String, dynamic>> fetchRSS(String url) async {
     }
   } catch (e) {
     throw Exception('Error fetching RSS: $e');
+  }
+}
+
+Future<Map<String, dynamic>> fetchNewsPortal() async {
+
+  const url = 'https://www.prothomalo.com/collection/latest';
+  try {
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final document = parse(utf8.decode(response.bodyBytes));
+
+      final channelTitle = document.querySelector('channel > title')?.text ?? 'Unknown Channel';
+
+      // Find meta tag with name="brand_name"
+      final metaTag = document.querySelector('meta[name="brand_name"]');
+      final content = metaTag?.attributes['content'] ?? 'Not found';
+
+      debugPrint(content);
+
+
+
+      final news = document.querySelectorAll('div.w8MVw').map((e) {
+        final headline =
+            e.querySelector('h3.headline-title   _1d6-d')?.text ?? "";
+        final postedTime =
+            e.querySelector('time.published-at fw8bp')?.text ?? "";
+
+        debugPrint("-----------${headline.toString()}");
+        debugPrint("-----------${postedTime.toString()}");
+        //final author = e.querySelector('span.price-new')?.text ?? '';
+        //return '$text — $author';
+        return {'headline': headline, 'postedTime': postedTime};
+      }).toList();
+
+      return {
+        'channelTitle': channelTitle,
+        'items': news,
+      };
+    } else {
+      throw Exception('Failed to load feed');
+    }
+  } catch (e) {
+    throw Exception('Failed to load feed');
   }
 }
