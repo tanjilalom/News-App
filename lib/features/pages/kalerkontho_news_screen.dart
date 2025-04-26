@@ -14,7 +14,7 @@ class KalerKonthoNewsScreen extends StatefulWidget {
 }
 
 class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
-  String _channelTitle = 'Kaler Kantho News';
+  final String _channelTitle = 'Kaler Kantho News';
   List<Map<String, String>> _items = [];
   bool _isLoading = true;
   bool _hasError = false;
@@ -44,7 +44,8 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
         final items = document.querySelectorAll('item').map((e) {
           final title = e.querySelector('title')?.text ?? 'No Title';
           final pubDate = _formatDate(e.querySelector('pubDate')?.text);
-          final link = e.querySelector('link')?.text ?? '';
+          final link = e.querySelector('guid')?.text ?? '';
+          print(link);
           final description = e.querySelector('description')?.text ?? '';
 
           return {

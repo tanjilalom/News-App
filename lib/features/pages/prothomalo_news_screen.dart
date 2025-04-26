@@ -34,7 +34,6 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
   void _scrollListener() {
     if (_scrollController.position.pixels ==
         _scrollController.position.maxScrollExtent) {
-      _fetchMoreNews();
     }
   }
 
@@ -52,7 +51,7 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
       if (response.statusCode == 200) {
         final document = parse(response.body);
         final articles =
-            document.querySelectorAll('.news_with_item, .wide-story-card');
+            document.querySelectorAll('.news_with_item, .wide-story-card, .news_item_content');
 
         final List<NewsItem> extractedItems = [];
 
@@ -61,8 +60,7 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
           final anchor = titleElement?.querySelector('a');
           final title = anchor?.text.trim() ?? 'No title';
           final link = anchor?.attributes['href'] ?? '';
-          final timeElement =
-              article.querySelector('.published-at, .published-time');
+          final timeElement = article.querySelector('.published-at, .published-time');
           final time = timeElement?.text.trim() ?? '';
           final categoryElement = article.querySelector('.sub-title');
           final category = categoryElement?.text.trim() ?? '';
@@ -70,17 +68,9 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
           if (title.isNotEmpty && link.isNotEmpty) {
             extractedItems.add(NewsItem(
               title: title,
-              url: link.startsWith('http')
-                  ? link
-                  : 'https://www.prothomalo.com$link',
+              url: link,
               time: time,
               category: category,
-              isVideo:
-                  article.querySelector('.story-icon[href*="video-play"]') !=
-                      null,
-              isPhoto:
-                  article.querySelector('.story-icon[href*="photo-camera"]') !=
-                      null,
             ));
           }
         }
@@ -100,10 +90,6 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
       });
       _showErrorSnackbar(e.toString());
     }
-  }
-
-  Future<void> _fetchMoreNews() async {
-    // Implement pagination if needed
   }
 
   void _showErrorSnackbar(String message) {
@@ -426,15 +412,11 @@ class NewsItem {
   final String url;
   final String time;
   final String category;
-  final bool isVideo;
-  final bool isPhoto;
 
   NewsItem({
     required this.title,
     required this.url,
     required this.time,
     required this.category,
-    required this.isVideo,
-    required this.isPhoto,
   });
 }

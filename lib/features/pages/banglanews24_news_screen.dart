@@ -356,10 +356,10 @@ class _NewsCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.trending_up,
                             size: 14,
-                            color: const Color(0xFFFF7043),
+                            color: Color(0xFFFF7043),
                           ),
                           const SizedBox(width: 4),
                           Text(

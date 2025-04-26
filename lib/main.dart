@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:web_scraping_with_flutter/features/pages/homepage.dart';
+import 'package:web_scraping_with_flutter/homepage.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +16,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: HomePage(),
+      home: const HomePage(),
     );
   }
 }
