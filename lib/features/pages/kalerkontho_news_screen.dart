@@ -1,10 +1,10 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class KalerKonthoNewsScreen extends StatefulWidget {
   const KalerKonthoNewsScreen({super.key});
@@ -36,7 +36,7 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
 
     try {
       final response =
-          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final document = parse(utf8.decode(response.bodyBytes));
@@ -44,8 +44,9 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
         final items = document.querySelectorAll('item').map((e) {
           final title = e.querySelector('title')?.text ?? 'No Title';
           final pubDate = _formatDate(e.querySelector('pubDate')?.text);
-          final link = e.querySelector('guid')?.text ?? '';
-          print(link);
+          final rawLink = e.querySelector('link')?.text.trim();
+          final fallbackLink = e.querySelector('guid')?.text.trim();
+          final link = (rawLink != null && rawLink.startsWith('http')) ? rawLink : fallbackLink ?? '';
           final description = e.querySelector('description')?.text ?? '';
 
           return {
@@ -62,34 +63,49 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
           _isLoading = false;
         });
       } else {
-        throw Exception('Failed to load RSS feed (${response.statusCode})');
+        throw Exception('RSS feed error: ${response.statusCode}');
       }
     } catch (e) {
       setState(() {
         _hasError = true;
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Error: ${e.toString()}'),
-        backgroundColor: Colors.red[400],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ));
+      _showErrorSnackBar(e.toString());
     }
   }
 
   String _formatDate(String? dateString) {
     if (dateString == null) return 'No Date';
-
     try {
-      final date = DateTime.parse(dateString);
+      final date = DateFormat('EEE, dd MMM yyyy HH:mm:ss Z', 'en_US').parse(dateString);
       return DateFormat('MMM dd, yyyy - hh:mm a').format(date);
-    } catch (e) {
+    } catch (_) {
       return dateString;
     }
   }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Error: $message'),
+      backgroundColor: Colors.red[400],
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  void _openNews(String url) async {
+    debugPrint('Opening: $url');
+    final uri = Uri.parse(url);
+
+    if (uri != null) {
+      final success =
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      debugPrint("Launch success? $success");
+    } else {
+      debugPrint("Invalid URI: $url");
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -107,22 +123,17 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
         centerTitle: true,
         backgroundColor: const Color(0xFF3366FF),
         elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
+        flexibleSpace: const DecoratedBox(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF3366FF),
-                Color(0xFF00CCFF),
-              ],
+              colors: [Color(0xFF3366FF), Color(0xFF00CCFF)],
             ),
           ),
         ),
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(20),
-          ),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
         ),
         actions: [
           IconButton(
@@ -133,109 +144,91 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF3366FF),
-              ),
-            )
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF3366FF)))
           : _hasError
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+          ? _buildErrorUI()
+          : RefreshIndicator(
+        onRefresh: _fetchNews,
+        color: const Color(0xFF3366FF),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            if (_lastUpdated != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Row(
                     children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red[400],
-                      ),
-                      const SizedBox(height: 16),
+                      Icon(Icons.update, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 8),
                       Text(
-                        'Failed to load news',
+                        'Updated ${DateFormat('MMM dd, hh:mm a').format(_lastUpdated!)}',
                         style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                          fontSize: 12,
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _fetchNews,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3366FF),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
-                        child: Text(
-                          'Try Again',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _fetchNews,
-                  color: const Color(0xFF3366FF),
-                  child: CustomScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    slivers: [
-                      if (_lastUpdated != null)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.update,
-                                  size: 16,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Updated ${DateFormat('MMM dd, hh:mm a').format(_lastUpdated!)}',
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.grey[600],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final item = _items[index];
-                              return _NewsCard(
-                                title: item['title']!,
-                                date: item['pubDate']!,
-                                description: item['description']!,
-                                onTap: () {
-                                  final link = item['link'];
-                                  if (link != null && link.isNotEmpty) {
-                                    debugPrint('Opening: $link');
-                                    // Add webview or browser launch logic here
-                                  }
-                                },
-                              );
-                            },
-                            childCount: _items.length,
-                          ),
-                        ),
-                      ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 20)),
                     ],
                   ),
                 ),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverList.builder(
+                itemCount: _items.length,
+                itemBuilder: (context, index) {
+                  final item = _items[index];
+                  final link = item['link'];
+                  return _NewsCard(
+                    title: item['title']!,
+                    date: item['pubDate']!,
+                    description: item['description']!,
+                    onTap: () => _openNews(link!),
+                  );
+                },
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorUI() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Failed to load news',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _fetchNews,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3366FF),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(
+              'Try Again',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -260,6 +253,7 @@ class _NewsCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -271,82 +265,73 @@ class _NewsCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF2D3748),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF2D3748),
+              ),
+            ),
+            if (description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                  ),
                 ),
               ),
-              if (description.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                const SizedBox(width: 6),
+                Text(
+                  date,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey[600],
                   ),
                 ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 14,
-                    color: Colors.grey[500],
+                const Spacer(),
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7367F0).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    date,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7367F0).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Read',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF7367F0),
-                          ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Read',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF7367F0),
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.arrow_forward,
-                          size: 14,
-                          color: Color(0xFF7367F0),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.arrow_forward,
+                        size: 14,
+                        color: Color(0xFF7367F0),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

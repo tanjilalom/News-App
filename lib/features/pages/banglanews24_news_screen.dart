@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BanglaNews24Screen extends StatefulWidget {
   const BanglaNews24Screen({super.key});
@@ -11,7 +12,8 @@ class BanglaNews24Screen extends StatefulWidget {
   _BanglaNews24ScreenState createState() => _BanglaNews24ScreenState();
 }
 
-class _BanglaNews24ScreenState extends State<BanglaNews24Screen> with SingleTickerProviderStateMixin {
+class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<NewsItem> _latestNews = [];
   List<NewsItem> _popularNews = [];
@@ -39,7 +41,8 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen> with SingleTick
     });
 
     try {
-      final response = await http.get(Uri.parse('https://www.banglanews24.com'))
+      final response = await http
+          .get(Uri.parse('https://www.banglanews24.com'))
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
@@ -54,7 +57,9 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen> with SingleTick
 
           return NewsItem(
             title: title,
-            url: link.startsWith('http') ? link : 'https://www.banglanews24.com$link',
+            url: link.startsWith('http')
+                ? link
+                : 'https://www.banglanews24.com$link',
             time: time,
             isPopular: false,
           );
@@ -68,7 +73,9 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen> with SingleTick
 
           return NewsItem(
             title: title,
-            url: link.startsWith('http') ? link : 'https://www.banglanews24.com$link',
+            url: link.startsWith('http')
+                ? link
+                : 'https://www.banglanews24.com$link',
             time: '',
             isPopular: true,
           );
@@ -168,90 +175,90 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen> with SingleTick
       ),
       body: _isLoading && _latestNews.isEmpty
           ? const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFF1E88E5),
-        ),
-      )
+              child: CircularProgressIndicator(
+                color: Color(0xFF1E88E5),
+              ),
+            )
           : _hasError && _latestNews.isEmpty
-          ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Colors.red[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load news',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _fetchNews,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E88E5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              child: Text(
-                'Try Again',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      )
-          : RefreshIndicator(
-        onRefresh: _fetchNews,
-        color: const Color(0xFF1E88E5),
-        child: Column(
-          children: [
-            if (_lastUpdated != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.update,
-                      size: 16,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Updated ${DateFormat('MMM dd, hh:mm a').format(_lastUpdated!)}',
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[600],
-                        fontSize: 12,
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red[400],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Text(
+                        'Failed to load news',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _fetchNews,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E88E5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                        child: Text(
+                          'Try Again',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _fetchNews,
+                  color: const Color(0xFF1E88E5),
+                  child: Column(
+                    children: [
+                      if (_lastUpdated != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.update,
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Updated ${DateFormat('MMM dd, hh:mm a').format(_lastUpdated!)}',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _buildNewsList(_latestNews),
+                            _buildNewsList(_popularNews),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildNewsList(_latestNews),
-                  _buildNewsList(_popularNews),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -271,9 +278,17 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen> with SingleTick
     );
   }
 
-  void _openNews(String url) {
+  void _openNews(String url) async {
     debugPrint('Opening: $url');
-    // Implement webview or browser launch
+    final uri = Uri.parse(url);
+
+    if (uri != null) {
+      final success =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      debugPrint("Launch success? $success");
+    } else {
+      debugPrint("Invalid URI: $url");
+    }
   }
 }
 

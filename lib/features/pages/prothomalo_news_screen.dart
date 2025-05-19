@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProthomAloNewsScreen extends StatefulWidget {
   const ProthomAloNewsScreen({super.key});
@@ -33,8 +34,7 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
 
   void _scrollListener() {
     if (_scrollController.position.pixels ==
-        _scrollController.position.maxScrollExtent) {
-    }
+        _scrollController.position.maxScrollExtent) {}
   }
 
   Future<void> _fetchNews() async {
@@ -50,8 +50,8 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
 
       if (response.statusCode == 200) {
         final document = parse(response.body);
-        final articles =
-            document.querySelectorAll('.news_with_item, .wide-story-card, .news_item_content');
+        final articles = document.querySelectorAll(
+            '.news_with_item, .wide-story-card, .news_item_content');
 
         final List<NewsItem> extractedItems = [];
 
@@ -60,7 +60,8 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
           final anchor = titleElement?.querySelector('a');
           final title = anchor?.text.trim() ?? 'No title';
           final link = anchor?.attributes['href'] ?? '';
-          final timeElement = article.querySelector('.published-at, .published-time');
+          final timeElement =
+              article.querySelector('.published-at, .published-time');
           final time = timeElement?.text.trim() ?? '';
           final categoryElement = article.querySelector('.sub-title');
           final category = categoryElement?.text.trim() ?? '';
@@ -278,9 +279,17 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
     );
   }
 
-  void _openNews(String url) {
+  void _openNews(String url) async {
     debugPrint('Opening: $url');
-    // Implement webview or browser launch
+    final uri = Uri.parse(url);
+
+    if (uri != null) {
+      final success =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      debugPrint("Launch success? $success");
+    } else {
+      debugPrint("Invalid URI: $url");
+    }
   }
 }
 

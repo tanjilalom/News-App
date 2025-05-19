@@ -26,9 +26,8 @@ class _IttefaqNewsScreenState extends State<IttefaqNewsScreen> {
   }
 
   Future<void> _fetchIttefaqNews() async {
-    // const String baseUrl = 'https://www.ittefaq.com.bd';
-    // const String url = '$baseUrl/trade';
-    const String url = 'https://www.ittefaq.com.bd';
+    const String baseUrl = 'https://www.ittefaq.com.bd';
+    const String url = '$baseUrl/latest-news';
 
     setState(() {
       _isLoading = true;
@@ -51,14 +50,14 @@ class _IttefaqNewsScreenState extends State<IttefaqNewsScreen> {
           if (titleElement != null && descElement != null) {
             final title = titleElement.text.trim();
             final href = titleElement.attributes['href'] ?? '';
-            final fullLink = href.startsWith('http') ? href : '$url$href';
+            final fullLink = href.startsWith('http') ? href : '$baseUrl$href'; // ✅ Fixed here
             final summary = descElement.text.trim();
 
             items.add({
               'title': title,
               'link': fullLink,
               'description': summary,
-              'pubDate': DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now()), // No real pubDate
+              'pubDate': DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now()),
             });
           }
         }
@@ -102,7 +101,7 @@ class _IttefaqNewsScreenState extends State<IttefaqNewsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _hasError
-          ? Center(child: Text("Error loading news."))
+          ? const Center(child: Text("Error loading news."))
           : RefreshIndicator(
         onRefresh: _fetchIttefaqNews,
         child: ListView.builder(
@@ -110,29 +109,33 @@ class _IttefaqNewsScreenState extends State<IttefaqNewsScreen> {
           itemCount: _newsList.length,
           itemBuilder: (context, index) {
             final item = _newsList[index];
+            final link = item['link'];
             return _NewsCard(
               title: item['title']!,
               date: item['pubDate']!,
               description: item['description']!,
-              onTap: () async {
-                debugPrint('Opening: ${item['link']}');
-                final url = item['link']!;
-                if (await canLaunchUrl(Uri.parse(url))) {
-                  await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Could not launch the URL'),
-                    backgroundColor: Colors.red,
-                  ));
-                }
-              },
-
+                onTap: () => _openNews(link!),
             );
           },
         ),
       ),
     );
   }
+
+  void _openNews(String url) async {
+    debugPrint('Opening: $url');
+    final uri = Uri.parse(url);
+
+    if (uri != null) {
+      final success =
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      debugPrint("Launch success? $success");
+    } else {
+      debugPrint("Invalid URI: $url");
+    }
+  }
+
+
 }
 
 class _NewsCard extends StatelessWidget {
