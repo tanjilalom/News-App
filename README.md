@@ -29,19 +29,19 @@ A modern web scraping application that fetches real-time Gold/Silver prices and 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="screenshots/image1.png?ct=jpeg" width="300px", height="520"/><br/>
+      <img src="screenshots/image1.png?ct=jpeg" width="300px", height="490"/><br/>
       <sub>Home Screen</sub>
     </td>
     <td align="center">
-      <img src="screenshots/image2.png?ct=jpeg" width="300px", height="520"/><br/>
+      <img src="screenshots/image2.png?ct=jpeg" width="300px", height="490"/><br/>
       <sub>Gold Prices</sub>
     </td>
     <td align="center">
-      <img src="screenshots/image3.png?ct=jpeg" width="300px", height="520"/><br/>
+      <img src="screenshots/image3.png?ct=jpeg" width="300px", height="490"/><br/>
       <sub>News List</sub>
     </td>
     <td align="center">
-      <img src="screenshots/image4.png" width="300px", height="520"/><br/>
+      <img src="screenshots/image4.png" width="300px", height="490"/><br/>
       <sub>News List</sub>
     </td>
   </tr>
