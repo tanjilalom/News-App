@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart';
@@ -50,29 +53,43 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
 
       if (response.statusCode == 200) {
         final document = parse(response.body);
+
+        // Multiple selectors for better compatibility
         final articles = document.querySelectorAll(
-            '.news_with_item, .wide-story-card, .news_item_content');
+            '.story-card, .news_with_item, .wide-story-card, .news_item_content, [class*="story"], [class*="news"]');
 
         final List<NewsItem> extractedItems = [];
 
         for (var article in articles) {
-          final titleElement = article.querySelector('.headline-title');
-          final anchor = titleElement?.querySelector('a');
-          final title = anchor?.text.trim() ?? 'No title';
-          final link = anchor?.attributes['href'] ?? '';
-          final timeElement =
-              article.querySelector('.published-at, .published-time');
-          final time = timeElement?.text.trim() ?? '';
-          final categoryElement = article.querySelector('.sub-title');
-          final category = categoryElement?.text.trim() ?? '';
+          try {
+            // Try multiple selectors for title
+            final titleElement = article.querySelector(
+                '.headline-title, .title, h2, h3, [class*="title"], [class*="headline"]');
+            final anchor =
+                titleElement?.querySelector('a') ?? article.querySelector('a');
+            final title = anchor?.text.trim() ?? 'No title';
+            final link = anchor?.attributes['href'] ?? '';
 
-          if (title.isNotEmpty && link.isNotEmpty) {
-            extractedItems.add(NewsItem(
-              title: title,
-              url: link,
-              time: time,
-              category: category,
-            ));
+            // Try multiple selectors for time
+            final timeElement = article.querySelector(
+                '.published-at, .published-time, .time, [class*="time"], [class*="published"]');
+            final time = timeElement?.text.trim() ?? '';
+
+            // Try multiple selectors for category
+            final categoryElement = article.querySelector(
+                '.sub-title, .category, [class*="category"], [class*="sub"]');
+            final category = categoryElement?.text.trim() ?? '';
+
+            if (title.isNotEmpty && title != 'No title' && link.isNotEmpty) {
+              extractedItems.add(NewsItem(
+                title: _cleanText(title),
+                url: link,
+                time: _cleanText(time),
+                category: _cleanText(category),
+              ));
+            }
+          } catch (e) {
+            debugPrint('Error parsing article: $e');
           }
         }
 
@@ -82,15 +99,31 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
           isLoading = false;
         });
       } else {
-        throw Exception('Failed to load news (${response.statusCode})');
+        throw Exception('HTTP ${response.statusCode}: Failed to load news');
       }
+    } on SocketException {
+      setState(() {
+        hasError = true;
+        isLoading = false;
+      });
+      _showErrorSnackbar('No internet connection');
+    } on TimeoutException {
+      setState(() {
+        hasError = true;
+        isLoading = false;
+      });
+      _showErrorSnackbar('Request timeout');
     } catch (e) {
       setState(() {
         hasError = true;
         isLoading = false;
       });
-      _showErrorSnackbar(e.toString());
+      _showErrorSnackbar('Failed to load news: ${e.toString()}');
     }
+  }
+
+  String _cleanText(String text) {
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   void _showErrorSnackbar(String message) {
@@ -168,8 +201,21 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
   Widget _buildBody() {
     if (isLoading && newsItems.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFFE51A1B),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              color: Color(0xFFE51A1B),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Loading latest news...',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 16,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -191,6 +237,15 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
               ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please check your internet connection',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -244,24 +299,64 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
                         fontSize: 12,
                       ),
                     ),
+                    const Spacer(),
+                    Text(
+                      '${newsItems.length} news',
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final item = newsItems[index];
-                return _NewsCard(
-                  title: item.title,
-                  time: item.time,
-                  category: item.category,
-                  onTap: () => _openNews(item.url),
-                );
-              },
-              childCount: newsItems.length,
+          if (newsItems.isEmpty && !isLoading)
+            SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.article,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No news found',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Try refreshing the page',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final item = newsItems[index];
+                  return _NewsCard(
+                    title: item.title,
+                    time: item.time,
+                    category: item.category,
+                    onTap: () => _openNews(item.url),
+                  );
+                },
+                childCount: newsItems.length,
+              ),
             ),
-          ),
           if (isLoading && newsItems.isNotEmpty)
             const SliverToBoxAdapter(
               child: Padding(
@@ -280,15 +375,23 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
   }
 
   void _openNews(String url) async {
-    debugPrint('Opening: $url');
-    final uri = Uri.parse(url);
+    try {
+      debugPrint('Opening: $url');
 
-    if (uri != null) {
-      final success =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-      debugPrint("Launch success? $success");
-    } else {
-      debugPrint("Invalid URI: $url");
+      // Ensure URL is absolute
+      if (!url.startsWith('http')) {
+        url = 'https://www.prothomalo.com$url';
+      }
+
+      final uri = Uri.parse(url);
+
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showErrorSnackbar('Could not launch $url');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error opening link: $e');
     }
   }
 }
@@ -350,6 +453,7 @@ class _NewsCard extends StatelessWidget {
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: const Color(0xFF2D3748),
+                      height: 1.4,
                     ),
                   ),
                   if (time.isNotEmpty) ...[

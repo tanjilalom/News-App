@@ -48,42 +48,91 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
       if (response.statusCode == 200) {
         final document = parse(response.body);
 
-        // Scrape latest news
-        final latestItems = document.querySelectorAll('#latest li');
-        final latestNews = latestItems.map((item) {
-          final link = item.querySelector('a')?.attributes['href'] ?? '';
-          final title = item.querySelector('a')?.text.trim() ?? 'No title';
-          final time = item.querySelector('.publish-time')?.text.trim() ?? '';
+        // Scrape latest news from the "সর্বশেষ" tab content
+        final latestNews = <NewsItem>[];
 
-          return NewsItem(
-            title: title,
-            url: link.startsWith('http')
-                ? link
-                : 'https://www.banglanews24.com$link',
-            time: time,
-            isPopular: false,
-          );
-        }).toList();
+        // Method 1: Try to get from the tab content
+        final tabContent = document.querySelector('#home-tab-pane');
+        if (tabContent != null) {
+          final latestItems = tabContent.querySelectorAll('li.list-group-item');
+          for (var item in latestItems) {
+            final linkElement = item.querySelector('a');
+            final link = linkElement?.attributes['href'] ?? '';
+            final title = linkElement?.text.trim() ?? 'No title';
 
-        // Scrape popular news
-        final popularItems = document.querySelectorAll('#readers-choice li');
-        final popularNews = popularItems.map((item) {
-          final link = item.querySelector('a')?.attributes['href'] ?? '';
-          final title = item.querySelector('a')?.text.trim() ?? 'No title';
+            if (link.isNotEmpty && title != 'No title') {
+              latestNews.add(NewsItem(
+                title: title,
+                url: link.startsWith('http')
+                    ? link
+                    : 'https://www.banglanews24.com$link',
+                time: _extractTimeFromTitle(title),
+                isPopular: false,
+              ));
+            }
+          }
+        }
 
-          return NewsItem(
-            title: title,
-            url: link.startsWith('http')
-                ? link
-                : 'https://www.banglanews24.com$link',
-            time: '',
-            isPopular: true,
-          );
-        }).toList();
+        // Method 2: Alternative approach - get from main news sections
+        if (latestNews.isEmpty) {
+          final newsSections = document.querySelectorAll('.position-relative');
+          for (var section in newsSections) {
+            final linkElement = section.querySelector('a.stretched-link');
+            final titleElement = section.querySelector('h5, h3, p.fs-5');
+
+            if (linkElement != null && titleElement != null) {
+              final link = linkElement.attributes['href'] ?? '';
+              final title = titleElement.text.trim();
+
+              if (link.isNotEmpty && title.isNotEmpty) {
+                latestNews.add(NewsItem(
+                  title: title,
+                  url: link.startsWith('http')
+                      ? link
+                      : 'https://www.banglanews24.com$link',
+                  time: _extractTimeFromTitle(title),
+                  isPopular: false,
+                ));
+              }
+            }
+          }
+        }
+
+        // Scrape popular news from "সর্বাধিক পঠিত" tab
+        final popularNews = <NewsItem>[];
+        final popularTab = document.querySelector('#profile-tab-pane');
+        if (popularTab != null) {
+          final popularItems =
+              popularTab.querySelectorAll('li.list-group-item');
+          for (var item in popularItems) {
+            final linkElement = item.querySelector('a');
+            final link = linkElement?.attributes['href'] ?? '';
+            final title = linkElement?.text.trim() ?? 'No title';
+
+            if (link.isNotEmpty && title != 'No title') {
+              popularNews.add(NewsItem(
+                title: title,
+                url: link.startsWith('http')
+                    ? link
+                    : 'https://www.banglanews24.com$link',
+                time: '',
+                isPopular: true,
+              ));
+            }
+          }
+        }
+
+        // If we still don't have enough news, use the latest news for both tabs
+        if (latestNews.length < 5 && popularNews.isNotEmpty) {
+          latestNews.addAll(popularNews.take(10));
+        }
+        if (popularNews.isEmpty && latestNews.isNotEmpty) {
+          popularNews.addAll(latestNews.take(10));
+        }
 
         setState(() {
-          _latestNews = latestNews;
-          _popularNews = popularNews;
+          _latestNews = latestNews.take(20).toList();
+          _popularNews = popularNews.take(20).toList();
           _lastUpdated = DateTime.now();
           _isLoading = false;
         });
@@ -97,6 +146,13 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
       });
       _showErrorSnackbar(e.toString());
     }
+  }
+
+  String _extractTimeFromTitle(String title) {
+    // Try to extract time information if available
+    // This is a simple implementation - you might need to adjust based on actual content
+    final now = DateTime.now();
+    return DateFormat('hh:mm a').format(now);
   }
 
   void _showErrorSnackbar(String message) {
@@ -263,6 +319,29 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
   }
 
   Widget _buildNewsList(List<NewsItem> newsItems) {
+    if (newsItems.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 48,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No news available',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: newsItems.length,
@@ -280,14 +359,17 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
 
   void _openNews(String url) async {
     debugPrint('Opening: $url');
-    final uri = Uri.parse(url);
 
-    if (uri != null) {
+    try {
+      final uri = Uri.parse(url);
       final success =
           await launchUrl(uri, mode: LaunchMode.externalApplication);
-      debugPrint("Launch success? $success");
-    } else {
-      debugPrint("Invalid URI: $url");
+
+      if (!success) {
+        _showErrorSnackbar('Could not launch $url');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error opening link: $e');
     }
   }
 }
