@@ -232,7 +232,7 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF3366FF).withOpacity(0.1),
+                    color: const Color(0xFF3366FF).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
@@ -272,7 +272,7 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: Colors.grey.withOpacity(0.1),
+          color: Colors.grey.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -298,7 +298,7 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
                   padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF28C76F).withOpacity(0.1),
+                    color: const Color(0xFF28C76F).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
