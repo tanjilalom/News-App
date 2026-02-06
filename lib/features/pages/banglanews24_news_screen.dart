@@ -42,7 +42,7 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
 
     try {
       final response = await http
-          .get(Uri.parse('https://www.banglanews24.com'))
+          .get(Uri.parse('https://www.banglanews24.com/'))
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
@@ -65,7 +65,7 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
                 title: title,
                 url: link.startsWith('http')
                     ? link
-                    : 'https://www.banglanews24.com$link',
+                    : 'https://www.banglanews24.com/$link',
                 time: _extractTimeFromTitle(title),
                 isPopular: false,
               ));
@@ -89,7 +89,7 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
                   title: title,
                   url: link.startsWith('http')
                       ? link
-                      : 'https://www.banglanews24.com$link',
+                      : 'https://www.banglanews24.com/$link',
                   time: _extractTimeFromTitle(title),
                   isPopular: false,
                 ));
@@ -114,7 +114,7 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
                 title: title,
                 url: link.startsWith('http')
                     ? link
-                    : 'https://www.banglanews24.com$link',
+                    : 'https://www.banglanews24.com/$link',
                 time: '',
                 isPopular: true,
               ));
@@ -399,7 +399,7 @@ class _NewsCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -447,7 +447,7 @@ class _NewsCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFF7043).withOpacity(0.1),
+                        color: const Color(0xFFFF7043).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(
