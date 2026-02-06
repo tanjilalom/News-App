@@ -55,12 +55,26 @@ class _IttefaqNewsScreenState extends State<IttefaqNewsScreen> {
           final descElement = block.querySelector('div.summery');
 
           if (titleElement != null && descElement != null) {
+            final href = titleElement.attributes['href'] ?? '';
+            // Fix the URL - convert relative URLs to absolute
+            String fullUrl = href;
+            if (href.startsWith('//')) {
+              // Protocol-relative URL - add https:
+              fullUrl = 'https:$href';
+            } else if (href.startsWith('/')) {
+              // Site-relative URL - add base URL
+              fullUrl = '$baseUrl$href';
+            } else if (!href.startsWith('http')) {
+              // Relative URL - add base URL
+              fullUrl = '$baseUrl/$href';
+            }
+
             items.add({
               'title': titleElement.text.trim(),
-              'link': titleElement.attributes['href'] ?? '',
+              'link': fullUrl,
               'description': descElement.text.trim(),
               'pubDate':
-                  DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now()),
+              DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now()),
             });
           }
         }
@@ -106,37 +120,49 @@ class _IttefaqNewsScreenState extends State<IttefaqNewsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _hasError
-              ? const Center(child: Text("Error loading news."))
-              : RefreshIndicator(
-                  onRefresh: _fetchIttefaqNews,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _newsList.length,
-                    itemBuilder: (context, index) {
-                      final item = _newsList[index];
-                      final link = item['link'];
-                      return _NewsCard(
-                        title: item['title']!,
-                        date: item['pubDate']!,
-                        description: item['description']!,
-                        onTap: () => _openNews(link!),
-                      );
-                    },
-                  ),
-                ),
+          ? const Center(child: Text("Error loading news."))
+          : RefreshIndicator(
+        onRefresh: _fetchIttefaqNews,
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: _newsList.length,
+          itemBuilder: (context, index) {
+            final item = _newsList[index];
+            final link = item['link'];
+            return _NewsCard(
+              title: item['title']!,
+              date: item['pubDate']!,
+              description: item['description']!,
+              onTap: () => _openNews(link!),
+            );
+          },
+        ),
+      ),
     );
   }
 
   void _openNews(String url) async {
     debugPrint('Opening: $url');
-    final uri = Uri.parse(url);
 
-    if (uri != null) {
-      final success =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final uri = Uri.parse(url);
+      final success = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      if (!success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not open: $url')),
+          );
+        }
+      }
       debugPrint("Launch success? $success");
-    } else {
-      debugPrint("Invalid URI: $url");
+    } catch (e) {
+      debugPrint("Error launching URL: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error opening link: $e')),
+        );
+      }
     }
   }
 }
@@ -166,7 +192,7 @@ class _NewsCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -208,9 +234,9 @@ class _NewsCard extends StatelessWidget {
                   const Spacer(),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7367F0).withOpacity(0.1),
+                      color: const Color(0xFF7367F0).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
