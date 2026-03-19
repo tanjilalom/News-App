@@ -1,154 +1,139 @@
-import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:web_scraping_with_flutter/core/models/news_item.dart';
+import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
+import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
+import 'package:web_scraping_with_flutter/core/utils/text_utils.dart';
+import 'package:web_scraping_with_flutter/core/widgets/error_state_widget.dart';
+import 'package:web_scraping_with_flutter/core/widgets/loading_shimmer_widget.dart';
+import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 
+/// Uses Prothom Alo's public REST API:
+///   GET /api/v1/stories?fields=...&section=bangladesh&limit=20
 class ProthomAloNewsScreen extends StatefulWidget {
   const ProthomAloNewsScreen({super.key});
 
   @override
-  _ProthomAloNewsScreenState createState() => _ProthomAloNewsScreenState();
+  State<ProthomAloNewsScreen> createState() => _ProthomAloNewsScreenState();
 }
 
 class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
-  List<NewsItem> newsItems = [];
-  bool isLoading = true;
-  bool hasError = false;
-  DateTime? lastUpdated;
-  final ScrollController _scrollController = ScrollController();
+  static const _baseUrl = 'https://www.prothomalo.com';
+  static const _accentColor = Color(0xFFE51A1B);
+
+  // Multiple category APIs for richer content
+  static const _sectionApis = [
+    '$_baseUrl/api/v1/stories?fields=id,headline,slug,sections,published-at,author-name&section=bangladesh&limit=15',
+    '$_baseUrl/api/v1/stories?fields=id,headline,slug,sections,published-at,author-name&section=politics&limit=10',
+    '$_baseUrl/api/v1/stories?fields=id,headline,slug,sections,published-at,author-name&section=world&limit=10',
+  ];
+
+  final http.Client _client = http.Client();
+
+  List<NewsItem> _items = const [];
+  bool _isLoading = true;
+  bool _hasError = false;
+  DateTime? _lastUpdated;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_scrollListener);
     _fetchNews();
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _client.close();
     super.dispose();
   }
 
-  void _scrollListener() {
-    if (_scrollController.position.pixels ==
-        _scrollController.position.maxScrollExtent) {}
-  }
-
-  Future<void> _fetchNews() async {
-    setState(() {
-      isLoading = true;
-      hasError = false;
-    });
-
+  String _formatTimestamp(int millisSinceEpoch) {
     try {
-      final response = await http
-          .get(Uri.parse('https://www.prothomalo.com/collection/latest'))
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final document = parse(response.body);
-
-        // Multiple selectors for better compatibility
-        final articles = document.querySelectorAll(
-            '.story-card, .news_with_item, .wide-story-card, .news_item_content, [class*="story"], [class*="news"]');
-
-        final List<NewsItem> extractedItems = [];
-
-        for (var article in articles) {
-          try {
-            // Try multiple selectors for title
-            final titleElement = article.querySelector(
-                '.headline-title, .title, h2, h3, [class*="title"], [class*="headline"]');
-            final anchor =
-                titleElement?.querySelector('a') ?? article.querySelector('a');
-            final title = anchor?.text.trim() ?? 'No title';
-            final link = anchor?.attributes['href'] ?? '';
-
-            // Try multiple selectors for time
-            final timeElement = article.querySelector(
-                '.published-at, .published-time, .time, [class*="time"], [class*="published"]');
-            final time = timeElement?.text.trim() ?? '';
-
-            // Try multiple selectors for category
-            final categoryElement = article.querySelector(
-                '.sub-title, .category, [class*="category"], [class*="sub"]');
-            final category = categoryElement?.text.trim() ?? '';
-
-            if (title.isNotEmpty && title != 'No title' && link.isNotEmpty) {
-              extractedItems.add(NewsItem(
-                title: _cleanText(title),
-                url: link,
-                time: _cleanText(time),
-                category: _cleanText(category),
-              ));
-            }
-          } catch (e) {
-            debugPrint('Error parsing article: $e');
-          }
-        }
-
-        setState(() {
-          newsItems = extractedItems;
-          lastUpdated = DateTime.now();
-          isLoading = false;
-        });
-      } else {
-        throw Exception('HTTP ${response.statusCode}: Failed to load news');
-      }
-    } on SocketException {
-      setState(() {
-        hasError = true;
-        isLoading = false;
-      });
-      _showErrorSnackbar('No internet connection');
-    } on TimeoutException {
-      setState(() {
-        hasError = true;
-        isLoading = false;
-      });
-      _showErrorSnackbar('Request timeout');
-    } catch (e) {
-      setState(() {
-        hasError = true;
-        isLoading = false;
-      });
-      _showErrorSnackbar('Failed to load news: ${e.toString()}');
+      final dt = DateTime.fromMillisecondsSinceEpoch(millisSinceEpoch);
+      return DateFormat('MMM dd, yyyy – hh:mm a').format(dt);
+    } catch (_) {
+      return '';
     }
   }
 
-  String _cleanText(String text) {
-    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
-  }
+  Future<void> _fetchNews() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
 
-  void _showErrorSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red[400],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        action: SnackBarAction(
-          label: 'Retry',
-          textColor: Colors.white,
-          onPressed: _fetchNews,
-        ),
-      ),
-    );
+    try {
+      final seenIds = <String>{};
+      final items = <NewsItem>[];
+
+      for (final apiUrl in _sectionApis) {
+        final response = await _client
+            .get(Uri.parse(apiUrl), headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
+            })
+            .timeout(const Duration(seconds: 15));
+
+        if (response.statusCode != 200) continue;
+
+        final json = jsonDecode(utf8.decode(response.bodyBytes));
+        final stories = (json['stories'] as List?) ?? [];
+
+        for (final story in stories) {
+          final id = story['id']?.toString() ?? '';
+          final headline = TextUtils.cleanText(story['headline']?.toString() ?? '');
+          final slug = story['slug']?.toString() ?? '';
+          final publishedAt = story['published-at'] as int? ?? 0;
+          final author = TextUtils.cleanText(story['author-name']?.toString() ?? '');
+
+          if (headline.isEmpty || slug.isEmpty || !seenIds.add(id)) continue;
+
+          // Extract section display name
+          final sections = story['sections'] as List? ?? [];
+          final sectionName = sections.isNotEmpty
+              ? TextUtils.cleanText(
+                  sections.first['display-name']?.toString() ?? '')
+              : '';
+
+          final url = '$_baseUrl/$slug';
+          final time = publishedAt > 0 ? _formatTimestamp(publishedAt) : '';
+
+          items.add(NewsItem(
+            title: headline,
+            url: url,
+            time: time,
+            category: sectionName,
+            description: author.isNotEmpty ? 'by $author' : '',
+          ));
+        }
+      }
+
+      // Sort by newest first (url contains no date, but published-at order is preserved per API)
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _lastUpdated = DateTime.now();
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
-      appBar: AppBar(
+      backgroundColor: AppColors.background,
+      appBar: PortalAppBar(
         title: Text(
           'প্রথম আলো',
           style: GoogleFonts.notoSansBengali(
@@ -157,271 +142,83 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
             color: Colors.white,
           ),
         ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFFE51A1B),
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFFE51A1B),
-                Color(0xFFC62828),
-              ],
-            ),
-          ),
-        ),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(20),
-          ),
-        ),
+        subtitle: const Text('Prothom Alo — Latest'),
+        gradientColors: const [Color(0xFFE51A1B), Color(0xFFC62828)],
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _fetchNews,
-            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            onPressed: _isLoading ? null : _fetchNews,
           ),
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _scrollController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOut,
-        ),
-        backgroundColor: const Color(0xFFE51A1B),
-        child: const Icon(Icons.arrow_upward, color: Colors.white),
-      ),
     );
   }
 
   Widget _buildBody() {
-    if (isLoading && newsItems.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: Color(0xFFE51A1B),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Loading latest news...',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 16,
-              ),
-            ),
-          ],
-        ),
+    if (_isLoading && _items.isEmpty) {
+      return const LoadingShimmerWidget();
+    }
+    if (_hasError && _items.isEmpty) {
+      return ErrorStateWidget(
+        accentColor: _accentColor,
+        onRetry: _fetchNews,
+        message: 'প্রথম আলো লোড করতে ব্যর্থ',
       );
     }
-
-    if (hasError && newsItems.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Colors.red[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load news',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Please check your internet connection',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _fetchNews,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE51A1B),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              child: Text(
-                'Try Again',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return RefreshIndicator(
       onRefresh: _fetchNews,
-      color: const Color(0xFFE51A1B),
-      child: CustomScrollView(
-        controller: _scrollController,
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          if (lastUpdated != null)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.update,
-                      size: 16,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Last updated: ${DateFormat('MMM dd, hh:mm a').format(lastUpdated!)}',
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${newsItems.length} news',
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (newsItems.isEmpty && !isLoading)
-            SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.article,
-                      size: 64,
-                      color: Colors.grey[400],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No news found',
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Try refreshing the page',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = newsItems[index];
-                  return _NewsCard(
-                    title: item.title,
-                    time: item.time,
-                    category: item.category,
-                    onTap: () => _openNews(item.url),
-                  );
-                },
-                childCount: newsItems.length,
-              ),
-            ),
-          if (isLoading && newsItems.isNotEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFFE51A1B),
-                  ),
-                ),
-              ),
-            ),
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        ],
+      color: _accentColor,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics()),
+        itemCount: _items.length + (_lastUpdated != null ? 1 : 0),
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          if (_lastUpdated != null && index == 0) {
+            return _UpdatedChip(
+              timestamp: TextUtils.formatTimestamp(_lastUpdated!),
+              count: _items.length,
+            );
+          }
+          final item = _items[_lastUpdated != null ? index - 1 : index];
+          return _ProthomAloCard(
+            item: item,
+            onTap: () => openExternalLink(context, item.url),
+          );
+        },
       ),
     );
   }
-
-  void _openNews(String url) async {
-    try {
-      debugPrint('Opening: $url');
-
-      // Ensure URL is absolute
-      if (!url.startsWith('http')) {
-        url = 'https://www.prothomalo.com$url';
-      }
-
-      final uri = Uri.parse(url);
-
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        _showErrorSnackbar('Could not launch $url');
-      }
-    } catch (e) {
-      _showErrorSnackbar('Error opening link: $e');
-    }
-  }
 }
 
-class _NewsCard extends StatelessWidget {
-  final String title;
-  final String time;
-  final String category;
+// ─── Card ───────────────────────────────────────────────────────────────────
+
+class _ProthomAloCard extends StatelessWidget {
+  const _ProthomAloCard({required this.item, required this.onTap});
+
+  final NewsItem item;
   final VoidCallback onTap;
 
-  const _NewsCard({
-    required this.title,
-    required this.time,
-    required this.category,
-    required this.onTap,
-  });
+  static const _accent = Color(0xFFE51A1B);
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
+          border: const Border(
+            left: BorderSide(color: _accent, width: 4),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -430,88 +227,88 @@ class _NewsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (category.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        category,
-                        style: GoogleFonts.notoSansBengali(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFFE51A1B),
-                        ),
+            if (item.category.isNotEmpty) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  item.category,
+                  style: GoogleFonts.notoSansBengali(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _accent,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text(
+              item.title,
+              style: GoogleFonts.notoSansBengali(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+                height: 1.4,
+              ),
+            ),
+            if (item.description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                item.description,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (item.time.isNotEmpty) ...[
+                  Icon(Icons.access_time_rounded,
+                      size: 13, color: Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      item.time,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.grey[600],
                       ),
-                    ),
-                  Text(
-                    title,
-                    style: GoogleFonts.notoSansBengali(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF2D3748),
-                      height: 1.4,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (time.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: Colors.grey[500],
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          time,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Row(
+                ] else
+                  const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE51A1B).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Read Full Story',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFFE51A1B),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.arrow_forward,
-                              size: 14,
-                              color: Color(0xFFE51A1B),
-                            ),
-                          ],
+                      Text(
+                        'পড়ুন',
+                        style: GoogleFonts.notoSansBengali(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _accent,
                         ),
                       ),
+                      const SizedBox(width: 3),
+                      const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 10, color: _accent),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -520,16 +317,23 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
-class NewsItem {
-  final String title;
-  final String url;
-  final String time;
-  final String category;
+class _UpdatedChip extends StatelessWidget {
+  const _UpdatedChip({required this.timestamp, required this.count});
+  final String timestamp;
+  final int count;
 
-  NewsItem({
-    required this.title,
-    required this.url,
-    required this.time,
-    required this.category,
-  });
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(Icons.update_rounded, size: 14, color: Colors.grey[500]),
+        const SizedBox(width: 6),
+        Text('Updated $timestamp',
+            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
+        const Spacer(),
+        Text('$count articles',
+            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
+  }
 }

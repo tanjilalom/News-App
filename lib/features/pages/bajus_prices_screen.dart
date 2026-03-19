@@ -1,10 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as parser;
-import 'package:html/dom.dart' as dom;
-import 'package:google_fonts/google_fonts.dart';
 import 'dart:io';
-import 'package:http/io_client.dart';  // Add this import for IOClient
+
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as parser;
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
+import 'package:web_scraping_with_flutter/core/utils/app_http_client.dart';
+import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 
 class MetalRate {
   final String product;
@@ -18,31 +22,28 @@ class BajusRateScreen extends StatefulWidget {
   const BajusRateScreen({super.key});
 
   @override
-  _BajusRateScreenState createState() => _BajusRateScreenState();
+  State<BajusRateScreen> createState() => _BajusRateScreenState();
 }
 
 class _BajusRateScreenState extends State<BajusRateScreen> {
-  List<MetalRate> goldRates = [];
-  List<MetalRate> silverRates = [];
+  List<MetalRate> goldRates = const [];
+  List<MetalRate> silverRates = const [];
   bool isLoading = true;
   DateTime? lastUpdated;
   bool hasError = false;
-  late http.Client _httpClient;  // Declare as class variable
+  String? errorMessage;
+  late final http.Client _httpClient;
 
   @override
   void initState() {
     super.initState();
-    // Initialize the custom HTTP client
-    final HttpClient client = HttpClient();
-    client.badCertificateCallback =
-        (X509Certificate cert, String host, int port) => true;
-    _httpClient = IOClient(client);
+    _httpClient = createAppHttpClient(allowBadCertificates: true);
     fetchRates();
   }
 
   @override
   void dispose() {
-    _httpClient.close();  // Close the client when done
+    _httpClient.close();
     super.dispose();
   }
 
@@ -52,6 +53,7 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
     setState(() {
       isLoading = true;
       hasError = false;
+      errorMessage = null;
     });
 
     const url = 'https://www.bajus.org/gold-price';
@@ -63,8 +65,8 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
 
       if (response.statusCode == 200) {
         final document = parser.parse(response.body);
-        final goldRows = document.querySelectorAll('.gold-table tbody tr') ?? [];
-        final silverRows = document.querySelectorAll('.silver-table tbody tr') ?? [];
+        final goldRows = document.querySelectorAll('.gold-table tbody tr');
+        final silverRows = document.querySelectorAll('.silver-table tbody tr');
 
         if (!mounted) return;
         setState(() {
@@ -74,16 +76,17 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
           isLoading = false;
         });
       } else {
-        _showError('Failed to load data. Server responded with ${response.statusCode}');
+        _showError(
+            'Failed to load data. Server responded with ${response.statusCode}');
       }
     } on SocketException {
       _showError('No internet connection');
-    } on HttpException {
+    } on http.ClientException {
       _showError('Could not reach the server');
     } on FormatException {
       _showError('Bad response format');
     } on Exception catch (e) {
-      _showError('An unexpected error occurred: ${e.toString()}');
+      _showError('An unexpected error occurred: $e');
     }
   }
 
@@ -101,6 +104,7 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
     setState(() {
       isLoading = false;
       hasError = true;
+      errorMessage = message;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -117,34 +121,14 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
-      appBar: AppBar(
+      backgroundColor: AppColors.background,
+      appBar: PortalAppBar(
         title: Text(
           'Gold & Silver Rates',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             fontSize: 20,
             color: Colors.white,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF3366FF),
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF3366FF),
-                Color(0xFF00CCFF),
-              ],
-            ),
-          ),
-        ),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(20),
           ),
         ),
         actions: [
@@ -175,6 +159,20 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
               'Failed to load rates',
               style: GoogleFonts.poppins(fontSize: 18),
             ),
+            if (errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             ElevatedButton(
               onPressed: fetchRates,
@@ -199,7 +197,7 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
                 children: [
                   if (lastUpdated != null)
                     Text(
-                      'Last updated: ${lastUpdated!.toString().substring(0, 16)}',
+                      'Last updated: ${DateFormat('MMM dd, yyyy - hh:mm a').format(lastUpdated!)}',
                       style: GoogleFonts.poppins(
                         color: Colors.grey[600],
                         fontSize: 12,
@@ -211,7 +209,8 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
             ),
           ),
           _buildMetalSection('Gold Rates', goldRates, Icons.monetization_on),
-          _buildMetalSection('Silver Rates', silverRates, Icons.currency_exchange),
+          _buildMetalSection(
+              'Silver Rates', silverRates, Icons.currency_exchange),
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
         ],
       ),
@@ -219,48 +218,58 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
   }
 
   Widget _buildMetalSection(
-      String title, List<MetalRate> rates, IconData icon) {
+    String title,
+    List<MetalRate> rates,
+    IconData icon,
+  ) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList(
-        delegate: SliverChildListDelegate([
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3366FF).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: const Color(0xFF3366FF),
-                    size: 20,
-                  ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            if (index == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3366FF).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: const Color(0xFF3366FF),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF2D3748),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (rates.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 20),
-              child: Text('No data available'),
-            )
-          else
-            ...rates.map((rate) => _buildRateCard(rate)).toList(),
-        ]),
+              );
+            }
+
+            if (rates.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.only(bottom: 20),
+                child: Text('No data available'),
+              );
+            }
+
+            return _buildRateCard(rates[index - 1]);
+          },
+          childCount: rates.isEmpty ? 2 : rates.length + 1,
+        ),
       ),
     );
   }
@@ -272,7 +281,7 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: Colors.grey.withOpacity(0.1),
+          color: Colors.grey.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -296,9 +305,9 @@ class _BajusRateScreenState extends State<BajusRateScreen> {
                 ),
                 Container(
                   padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF28C76F).withOpacity(0.1),
+                    color: const Color(0xFF28C76F).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(

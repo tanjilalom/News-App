@@ -1,10 +1,13 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:html/parser.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
+import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
+import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 
 class KalerKonthoNewsScreen extends StatefulWidget {
   const KalerKonthoNewsScreen({super.key});
@@ -14,8 +17,12 @@ class KalerKonthoNewsScreen extends StatefulWidget {
 }
 
 class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
+  static const _feedUrl = 'https://www.kalerkantho.com/rss.xml';
+
+  final http.Client _client = http.Client();
   final String _channelTitle = 'Kaler Kantho News';
-  List<Map<String, String>> _items = [];
+
+  List<_RssNewsItem> _items = const [];
   bool _isLoading = true;
   bool _hasError = false;
   DateTime? _lastUpdated;
@@ -26,58 +33,74 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
     _fetchNews();
   }
 
+  @override
+  void dispose() {
+    _client.close();
+    super.dispose();
+  }
+
   Future<void> _fetchNews() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
 
-    const url = 'https://www.kalerkantho.com/rss.xml';
-
     try {
-      final response =
-          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .get(Uri.parse(_feedUrl))
+          .timeout(const Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
-        final document = parse(utf8.decode(response.bodyBytes));
-
-        final items = document.querySelectorAll('item').map((e) {
-          final title = e.querySelector('title')?.text ?? 'No Title';
-          final pubDate = _formatDate(e.querySelector('pubDate')?.text);
-          final rawLink = e.querySelector('link')?.text.trim();
-          final fallbackLink = e.querySelector('guid')?.text.trim();
-          final link = (rawLink != null && rawLink.startsWith('http'))
-              ? rawLink
-              : fallbackLink ?? '';
-          final description = e.querySelector('description')?.text ?? '';
-
-          return {
-            'title': title,
-            'pubDate': pubDate,
-            'link': link,
-            'description': description,
-          };
-        }).toList();
-
-        setState(() {
-          _items = items;
-          _lastUpdated = DateTime.now();
-          _isLoading = false;
-        });
-      } else {
+      if (response.statusCode != 200) {
         throw Exception('RSS feed error: ${response.statusCode}');
       }
-    } catch (e) {
+
+      final document = parse(utf8.decode(response.bodyBytes));
+      final seenLinks = <String>{};
+      final items = <_RssNewsItem>[];
+
+      for (final element in document.querySelectorAll('item')) {
+        final rawLink = element.querySelector('link')?.text.trim() ?? '';
+        final fallbackLink = element.querySelector('guid')?.text.trim() ?? '';
+        final link = rawLink.startsWith('http') ? rawLink : fallbackLink;
+
+        if (link.isEmpty || !seenLinks.add(link)) {
+          continue;
+        }
+
+        items.add(
+          _RssNewsItem(
+            title: element.querySelector('title')?.text.trim() ?? 'No Title',
+            pubDate: _formatDate(element.querySelector('pubDate')?.text),
+            link: link,
+            description:
+                _cleanText(element.querySelector('description')?.text ?? ''),
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _lastUpdated = DateTime.now();
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
       setState(() {
         _hasError = true;
         _isLoading = false;
       });
-      _showErrorSnackBar(e.toString());
+      _showErrorSnackBar(error.toString());
     }
   }
 
   String _formatDate(String? dateString) {
-    if (dateString == null) return 'No Date';
+    if (dateString == null || dateString.isEmpty) {
+      return 'No Date';
+    }
+
     try {
       final date =
           DateFormat('EEE, dd MMM yyyy HH:mm:ss Z', 'en_US').parse(dateString);
@@ -87,33 +110,28 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
     }
   }
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Error: $message'),
-      backgroundColor: Colors.red[400],
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+  String _cleanText(String text) {
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
-  void _openNews(String url) async {
-    debugPrint('Opening: $url');
-    final uri = Uri.parse(url);
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error: $message'),
+        backgroundColor: Colors.red[400],
+      ),
+    );
+  }
 
-    if (uri != null) {
-      final success =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-      debugPrint("Launch success? $success");
-    } else {
-      debugPrint("Invalid URI: $url");
-    }
+  Future<void> _openNews(String url) {
+    return openExternalLink(context, url);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
-      appBar: AppBar(
+      backgroundColor: AppColors.background,
+      appBar: PortalAppBar(
         title: Text(
           _channelTitle,
           style: GoogleFonts.poppins(
@@ -122,37 +140,22 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
             color: Colors.white,
           ),
         ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF3366FF),
-        elevation: 0,
-        flexibleSpace: const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF3366FF), Color(0xFF00CCFF)],
-            ),
-          ),
-        ),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _fetchNews,
+            onPressed: _isLoading ? null : _fetchNews,
             tooltip: 'Refresh',
           ),
         ],
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF3366FF)))
+              child: CircularProgressIndicator(color: Color(0xFF3366FF)),
+            )
           : _hasError
               ? _buildErrorUI()
               : RefreshIndicator(
                   onRefresh: _fetchNews,
-                  color: const Color(0xFF3366FF),
                   child: CustomScrollView(
                     physics: const BouncingScrollPhysics(),
                     slivers: [
@@ -162,8 +165,11 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
                             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                             child: Row(
                               children: [
-                                Icon(Icons.update,
-                                    size: 16, color: Colors.grey[600]),
+                                Icon(
+                                  Icons.update,
+                                  size: 16,
+                                  color: Colors.grey[600],
+                                ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Updated ${DateFormat('MMM dd, hh:mm a').format(_lastUpdated!)}',
@@ -182,12 +188,11 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
                           itemCount: _items.length,
                           itemBuilder: (context, index) {
                             final item = _items[index];
-                            final link = item['link'];
                             return _NewsCard(
-                              title: item['title']!,
-                              date: item['pubDate']!,
-                              description: item['description']!,
-                              onTap: () => _openNews(link!),
+                              title: item.title,
+                              date: item.pubDate,
+                              description: item.description,
+                              onTap: () => _openNews(item.link),
                             );
                           },
                         ),
@@ -217,7 +222,7 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
           ElevatedButton(
             onPressed: _fetchNews,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3366FF),
+              backgroundColor: AppColors.brandBlue,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -237,18 +242,32 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
   }
 }
 
-class _NewsCard extends StatelessWidget {
-  final String title;
-  final String date;
-  final String description;
-  final VoidCallback onTap;
+class _RssNewsItem {
+  const _RssNewsItem({
+    required this.title,
+    required this.pubDate,
+    required this.link,
+    required this.description,
+  });
 
+  final String title;
+  final String pubDate;
+  final String link;
+  final String description;
+}
+
+class _NewsCard extends StatelessWidget {
   const _NewsCard({
     required this.title,
     required this.date,
     required this.description,
     required this.onTap,
   });
+
+  final String title;
+  final String date;
+  final String description;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -263,7 +282,7 @@ class _NewsCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -277,7 +296,7 @@ class _NewsCard extends StatelessWidget {
               style: GoogleFonts.poppins(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF2D3748),
+                color: AppColors.textPrimary,
               ),
             ),
             if (description.isNotEmpty)
@@ -310,7 +329,7 @@ class _NewsCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF7367F0).withOpacity(0.1),
+                    color: const Color(0xFF7367F0).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(

@@ -1,22 +1,29 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:html/parser.dart';
+import 'package:http/http.dart' as http;
+import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
+import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
+import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 
 class BanglaNews24Screen extends StatefulWidget {
   const BanglaNews24Screen({super.key});
 
   @override
-  _BanglaNews24ScreenState createState() => _BanglaNews24ScreenState();
+  State<BanglaNews24Screen> createState() => _BanglaNews24ScreenState();
 }
 
 class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  List<NewsItem> _latestNews = [];
-  List<NewsItem> _popularNews = [];
+  static const _baseUrl = 'https://www.banglanews24.com';
+
+  final http.Client _client = http.Client();
+
+  late final TabController _tabController;
+  List<NewsItem> _latestNews = const [];
+  List<NewsItem> _popularNews = const [];
   bool _isLoading = true;
   bool _hasError = false;
   DateTime? _lastUpdated;
@@ -30,129 +37,144 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
 
   @override
   void dispose() {
+    _client.close();
     _tabController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchNews() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
 
     try {
-      final response = await http
-          .get(Uri.parse('https://www.banglanews24.com'))
+      final response = await _client
+          .get(Uri.parse(_baseUrl))
           .timeout(const Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
-        final document = parse(response.body);
-
-        // Scrape latest news from the "সর্বশেষ" tab content
-        final latestNews = <NewsItem>[];
-
-        // Method 1: Try to get from the tab content
-        final tabContent = document.querySelector('#home-tab-pane');
-        if (tabContent != null) {
-          final latestItems = tabContent.querySelectorAll('li.list-group-item');
-          for (var item in latestItems) {
-            final linkElement = item.querySelector('a');
-            final link = linkElement?.attributes['href'] ?? '';
-            final title = linkElement?.text.trim() ?? 'No title';
-
-            if (link.isNotEmpty && title != 'No title') {
-              latestNews.add(NewsItem(
-                title: title,
-                url: link.startsWith('http')
-                    ? link
-                    : 'https://www.banglanews24.com$link',
-                time: _extractTimeFromTitle(title),
-                isPopular: false,
-              ));
-            }
-          }
-        }
-
-        // Method 2: Alternative approach - get from main news sections
-        if (latestNews.isEmpty) {
-          final newsSections = document.querySelectorAll('.position-relative');
-          for (var section in newsSections) {
-            final linkElement = section.querySelector('a.stretched-link');
-            final titleElement = section.querySelector('h5, h3, p.fs-5');
-
-            if (linkElement != null && titleElement != null) {
-              final link = linkElement.attributes['href'] ?? '';
-              final title = titleElement.text.trim();
-
-              if (link.isNotEmpty && title.isNotEmpty) {
-                latestNews.add(NewsItem(
-                  title: title,
-                  url: link.startsWith('http')
-                      ? link
-                      : 'https://www.banglanews24.com$link',
-                  time: _extractTimeFromTitle(title),
-                  isPopular: false,
-                ));
-              }
-            }
-          }
-        }
-
-        // Scrape popular news from "সর্বাধিক পঠিত" tab
-        final popularNews = <NewsItem>[];
-        final popularTab = document.querySelector('#profile-tab-pane');
-        if (popularTab != null) {
-          final popularItems =
-              popularTab.querySelectorAll('li.list-group-item');
-          for (var item in popularItems) {
-            final linkElement = item.querySelector('a');
-            final link = linkElement?.attributes['href'] ?? '';
-            final title = linkElement?.text.trim() ?? 'No title';
-
-            if (link.isNotEmpty && title != 'No title') {
-              popularNews.add(NewsItem(
-                title: title,
-                url: link.startsWith('http')
-                    ? link
-                    : 'https://www.banglanews24.com$link',
-                time: '',
-                isPopular: true,
-              ));
-            }
-          }
-        }
-
-        // If we still don't have enough news, use the latest news for both tabs
-        if (latestNews.length < 5 && popularNews.isNotEmpty) {
-          latestNews.addAll(popularNews.take(10));
-        }
-        if (popularNews.isEmpty && latestNews.isNotEmpty) {
-          popularNews.addAll(latestNews.take(10));
-        }
-
-        setState(() {
-          _latestNews = latestNews.take(20).toList();
-          _popularNews = popularNews.take(20).toList();
-          _lastUpdated = DateTime.now();
-          _isLoading = false;
-        });
-      } else {
+      if (response.statusCode != 200) {
         throw Exception('Failed to load news (${response.statusCode})');
       }
-    } catch (e) {
+
+      final document = parse(utf8.decode(response.bodyBytes));
+      final latestNews = <NewsItem>[];
+      final popularNews = <NewsItem>[];
+      final seenLatest = <String>{};
+      final seenPopular = <String>{};
+
+      final latestTab = document.querySelector('#home-tab-pane');
+      if (latestTab != null) {
+        _collectTabItems(
+          container: latestTab,
+          target: latestNews,
+          seenLinks: seenLatest,
+          isPopular: false,
+        );
+      }
+
+      if (latestNews.isEmpty) {
+        for (final section in document.querySelectorAll('.position-relative')) {
+          final linkElement = section.querySelector('a.stretched-link, a');
+          final titleElement = section.querySelector('h5, h3, p.fs-5, p');
+          final url = normalizeExternalUrl(
+            linkElement?.attributes['href'] ?? '',
+            baseUrl: _baseUrl,
+          );
+          final title = _cleanText(titleElement?.text ?? '');
+
+          if (url == null || title.isEmpty || !seenLatest.add(url)) {
+            continue;
+          }
+
+          latestNews.add(
+            NewsItem(
+              title: title,
+              url: url,
+              time: '',
+              isPopular: false,
+            ),
+          );
+        }
+      }
+
+      final popularTab = document.querySelector('#profile-tab-pane');
+      if (popularTab != null) {
+        _collectTabItems(
+          container: popularTab,
+          target: popularNews,
+          seenLinks: seenPopular,
+          isPopular: true,
+        );
+      }
+
+      if (latestNews.length < 5 && popularNews.isNotEmpty) {
+        latestNews.addAll(
+          popularNews.where((item) => seenLatest.add(item.url)).take(10),
+        );
+      }
+      if (popularNews.isEmpty && latestNews.isNotEmpty) {
+        popularNews.addAll(
+          latestNews
+              .where((item) => seenPopular.add(item.url))
+              .take(10)
+              .map((item) => item.copyWith(isPopular: true)),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _latestNews = latestNews.take(20).toList(growable: false);
+        _popularNews = popularNews.take(20).toList(growable: false);
+        _lastUpdated = DateTime.now();
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
       setState(() {
         _hasError = true;
         _isLoading = false;
       });
-      _showErrorSnackbar(e.toString());
+      _showErrorSnackbar(error.toString());
     }
   }
 
-  String _extractTimeFromTitle(String title) {
-    // Try to extract time information if available
-    // This is a simple implementation - you might need to adjust based on actual content
-    final now = DateTime.now();
-    return DateFormat('hh:mm a').format(now);
+  void _collectTabItems({
+    required dynamic container,
+    required List<NewsItem> target,
+    required Set<String> seenLinks,
+    required bool isPopular,
+  }) {
+    for (final item in container.querySelectorAll('li.list-group-item')) {
+      final linkElement = item.querySelector('a');
+      final url = normalizeExternalUrl(
+        linkElement?.attributes['href'] ?? '',
+        baseUrl: _baseUrl,
+      );
+      final title = _cleanText(linkElement?.text ?? '');
+      final time = _cleanText(
+        item.querySelector('time, .time, small')?.text ?? '',
+      );
+
+      if (url == null || title.isEmpty || !seenLinks.add(url)) {
+        continue;
+      }
+
+      target.add(
+        NewsItem(
+          title: title,
+          url: url,
+          time: time,
+          isPopular: isPopular,
+        ),
+      );
+    }
+  }
+
+  String _cleanText(String text) {
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   void _showErrorSnackbar(String message) {
@@ -160,10 +182,6 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red[400],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
         action: SnackBarAction(
           label: 'Retry',
           textColor: Colors.white,
@@ -173,11 +191,15 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
     );
   }
 
+  Future<void> _openNews(String url) {
+    return openExternalLink(context, url, baseUrl: _baseUrl);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
-      appBar: AppBar(
+      backgroundColor: AppColors.background,
+      appBar: PortalAppBar(
         title: Text(
           'BanglaNews24',
           style: GoogleFonts.notoSansBengali(
@@ -186,30 +208,11 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
             color: Colors.white,
           ),
         ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF1E88E5),
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF1E88E5),
-                Color(0xFF00ACC1),
-              ],
-            ),
-          ),
-        ),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(20),
-          ),
-        ),
+        gradientColors: const [Color(0xFF1E88E5), Color(0xFF00ACC1)],
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _fetchNews,
+            onPressed: _isLoading ? null : _fetchNews,
             tooltip: 'Refresh',
           ),
         ],
@@ -231,90 +234,78 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
       ),
       body: _isLoading && _latestNews.isEmpty
           ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF1E88E5),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
             )
           : _hasError && _latestNews.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Failed to load news',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _fetchNews,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E88E5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
-                        child: Text(
-                          'Try Again',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _fetchNews,
-                  color: const Color(0xFF1E88E5),
-                  child: Column(
-                    children: [
-                      if (_lastUpdated != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.update,
-                                size: 16,
-                                color: Colors.grey[600],
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Updated ${DateFormat('MMM dd, hh:mm a').format(_lastUpdated!)}',
-                                style: GoogleFonts.poppins(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
+              ? _buildErrorState()
+              : Column(
+                  children: [
+                    if (_lastUpdated != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                        child: Row(
                           children: [
-                            _buildNewsList(_latestNews),
-                            _buildNewsList(_popularNews),
+                            Icon(Icons.update,
+                                size: 16, color: Colors.grey[600]),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Updated ${_formatTimestamp(_lastUpdated!)}',
+                              style: GoogleFonts.poppins(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildNewsList(_latestNews),
+                          _buildNewsList(_popularNews),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Failed to load news',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _fetchNews,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E88E5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(
+              'Try Again',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -324,11 +315,7 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.article_outlined,
-              size: 48,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.article_outlined, size: 48, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               'No news available',
@@ -342,44 +329,57 @@ class _BanglaNews24ScreenState extends State<BanglaNews24Screen>
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: newsItems.length,
-      itemBuilder: (context, index) {
-        final item = newsItems[index];
-        return _NewsCard(
-          title: item.title,
-          time: item.time,
-          isPopular: item.isPopular,
-          onTap: () => _openNews(item.url),
-        );
-      },
+    return RefreshIndicator(
+      onRefresh: _fetchNews,
+      color: const Color(0xFF1E88E5),
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        itemCount: newsItems.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final item = newsItems[index];
+          return _NewsCard(
+            title: item.title,
+            time: item.time,
+            isPopular: item.isPopular,
+            onTap: () => _openNews(item.url),
+          );
+        },
+      ),
     );
   }
 
-  void _openNews(String url) async {
-    debugPrint('Opening: $url');
+  String _formatTimestamp(DateTime value) {
+    final month = _monthLabel(value.month);
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final meridiem = value.hour >= 12 ? 'PM' : 'AM';
+    return '$month ${value.day}, $hour:$minute $meridiem';
+  }
 
-    try {
-      final uri = Uri.parse(url);
-      final success =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-
-      if (!success) {
-        _showErrorSnackbar('Could not launch $url');
-      }
-    } catch (e) {
-      _showErrorSnackbar('Error opening link: $e');
-    }
+  String _monthLabel(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
   }
 }
 
 class _NewsCard extends StatelessWidget {
-  final String title;
-  final String time;
-  final bool isPopular;
-  final VoidCallback onTap;
-
   const _NewsCard({
     required this.title,
     required this.time,
@@ -387,19 +387,23 @@ class _NewsCard extends StatelessWidget {
     required this.onTap,
   });
 
+  final String title;
+  final String time;
+  final bool isPopular;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -415,7 +419,7 @@ class _NewsCard extends StatelessWidget {
                 style: GoogleFonts.notoSansBengali(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF2D3748),
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
@@ -424,11 +428,8 @@ class _NewsCard extends StatelessWidget {
                   if (time.isNotEmpty)
                     Row(
                       children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: Colors.grey[500],
-                        ),
+                        Icon(Icons.access_time,
+                            size: 14, color: Colors.grey[500]),
                         const SizedBox(width: 4),
                         Text(
                           time,
@@ -447,7 +448,7 @@ class _NewsCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFF7043).withOpacity(0.1),
+                        color: const Color(0xFFFF7043).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(
@@ -482,15 +483,29 @@ class _NewsCard extends StatelessWidget {
 }
 
 class NewsItem {
-  final String title;
-  final String url;
-  final String time;
-  final bool isPopular;
-
-  NewsItem({
+  const NewsItem({
     required this.title,
     required this.url,
     required this.time,
     required this.isPopular,
   });
+
+  final String title;
+  final String url;
+  final String time;
+  final bool isPopular;
+
+  NewsItem copyWith({
+    String? title,
+    String? url,
+    String? time,
+    bool? isPopular,
+  }) {
+    return NewsItem(
+      title: title ?? this.title,
+      url: url ?? this.url,
+      time: time ?? this.time,
+      isPopular: isPopular ?? this.isPopular,
+    );
+  }
 }

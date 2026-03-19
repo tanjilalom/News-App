@@ -1,7 +1,13 @@
+import 'dart:convert';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:google_fonts/google_fonts.dart';
 import 'package:html/parser.dart' show parse;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
+import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
+import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 
 class TBSNewsScreen extends StatefulWidget {
   const TBSNewsScreen({super.key});
@@ -11,36 +17,45 @@ class TBSNewsScreen extends StatefulWidget {
 }
 
 class _TBSNewsScreenState extends State<TBSNewsScreen> {
+  final NewsScraperService _service = NewsScraperService();
   late Future<List<TBSNewsModel>> futureNews;
 
   @override
   void initState() {
     super.initState();
-    futureNews = NewsScraperService().fetchNews();
+    futureNews = _service.fetchNews();
+  }
+
+  @override
+  void dispose() {
+    _service.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshNews() async {
     setState(() {
-      futureNews = NewsScraperService().fetchNews();
+      futureNews = _service.fetchNews();
     });
+    await futureNews;
+  }
+
+  Future<void> _openNews(String url) {
+    return openExternalLink(context, url, baseUrl: NewsScraperService.baseUrl);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
-      appBar: AppBar(
-        title: const Text(
+      backgroundColor: AppColors.background,
+      appBar: PortalAppBar(
+        title: Text(
           'TBS News বাংলা',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
+          style: GoogleFonts.notoSansBengali(
+            fontWeight: FontWeight.w700,
             fontSize: 20,
             color: Colors.white,
           ),
         ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF3366FF),
-        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
@@ -51,34 +66,53 @@ class _TBSNewsScreenState extends State<TBSNewsScreen> {
       body: FutureBuilder<List<TBSNewsModel>>(
         future: futureNews,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return const Center(child: Text("Error loading news."));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading news.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            );
           }
 
-          final newsList = snapshot.data!;
+          final newsList = snapshot.data ?? const <TBSNewsModel>[];
 
           return RefreshIndicator(
             onRefresh: _refreshNews,
-            child: ListView.builder(
+            child: ListView.separated(
               padding: const EdgeInsets.all(16),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
               itemCount: newsList.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 16),
               itemBuilder: (context, index) {
                 final news = newsList[index];
                 return InkWell(
                   onTap: () => _openNews(news.articleUrl),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -90,41 +124,31 @@ class _TBSNewsScreenState extends State<TBSNewsScreen> {
                         if (news.imageUrl.isNotEmpty)
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              news.imageUrl,
+                            child: CachedNetworkImage(
+                              imageUrl: news.imageUrl,
                               width: 100,
                               height: 100,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
+                              placeholder: (context, _) => Container(
                                 width: 100,
                                 height: 100,
                                 color: Colors.grey[200],
-                                child: const Icon(Icons.broken_image,
-                                    color: Colors.grey),
-                              ),
-                              loadingBuilder:
-                                  (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return Container(
-                                  width: 100,
-                                  height: 100,
-                                  color: Colors.grey[200],
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      value:
-                                          loadingProgress.expectedTotalBytes !=
-                                                  null
-                                              ? loadingProgress
-                                                      .cumulativeBytesLoaded /
-                                                  loadingProgress
-                                                      .expectedTotalBytes!
-                                              : null,
-                                      color: Colors.deepOrange,
-                                    ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.deepOrange,
                                   ),
-                                );
-                              },
+                                ),
+                              ),
+                              errorWidget: (context, _, __) => Container(
+                                width: 100,
+                                height: 100,
+                                color: Colors.grey[200],
+                                child: const Icon(
+                                  Icons.broken_image,
+                                  color: Colors.grey,
+                                ),
+                              ),
                             ),
                           ),
                         if (news.imageUrl.isNotEmpty) const SizedBox(width: 12),
@@ -134,7 +158,7 @@ class _TBSNewsScreenState extends State<TBSNewsScreen> {
                             children: [
                               Text(
                                 news.title,
-                                style: const TextStyle(
+                                style: GoogleFonts.notoSansBengali(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
                                   height: 1.3,
@@ -159,22 +183,26 @@ class _TBSNewsScreenState extends State<TBSNewsScreen> {
                                   Icon(Icons.access_time,
                                       size: 14, color: Colors.grey[500]),
                                   const SizedBox(width: 4),
-                                  Text(
-                                    news.time,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
+                                  Expanded(
+                                    child: Text(
+                                      news.time,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const Spacer(),
-                                  Text(
-                                    news.category,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.blueGrey[600],
+                                  if (news.category.isNotEmpty)
+                                    Text(
+                                      news.category,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.blueGrey[600],
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ],
@@ -191,42 +219,10 @@ class _TBSNewsScreenState extends State<TBSNewsScreen> {
       ),
     );
   }
-
-  void _openNews(String url) async {
-    debugPrint('Opening: $url');
-    try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open the link'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error launching URL: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid URL'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
 }
 
 class TBSNewsModel {
-  final String title;
-  final String description;
-  final String articleUrl;
-  final String category;
-  final String time;
-  final String imageUrl;
-
-  TBSNewsModel({
+  const TBSNewsModel({
     required this.title,
     required this.description,
     required this.articleUrl,
@@ -234,66 +230,90 @@ class TBSNewsModel {
     required this.time,
     required this.imageUrl,
   });
+
+  final String title;
+  final String description;
+  final String articleUrl;
+  final String category;
+  final String time;
+  final String imageUrl;
 }
 
 class NewsScraperService {
   static const String baseUrl = 'https://www.tbsnews.net';
 
+  final http.Client _client = http.Client();
+
+  void dispose() {
+    _client.close();
+  }
+
   Future<List<TBSNewsModel>> fetchNews() async {
-    final url = Uri.parse('$baseUrl/bangla');
-    final response = await http.get(url);
+    final response = await _client
+        .get(Uri.parse('$baseUrl/bangla'))
+        .timeout(const Duration(seconds: 15));
 
-    if (response.statusCode == 200) {
-      final document = parse(response.body);
-      final newsCards = document.querySelectorAll('.card');
-      List<TBSNewsModel> articles = [];
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load TBS news: ${response.statusCode}');
+    }
 
-      for (var card in newsCards) {
-        try {
-          if (card.querySelector('h3 a') == null) continue;
+    final document = parse(utf8.decode(response.bodyBytes));
+    final newsCards = document.querySelectorAll('.card');
+    final seenUrls = <String>{};
+    final articles = <TBSNewsModel>[];
 
-          final titleElement = card.querySelector('h3 a')!;
-          final descElement = card.querySelector('.card-section p');
-          final dateElement = card.querySelector('.date');
-          final imageElement = card.querySelector('img');
+    for (final card in newsCards) {
+      try {
+        final titleElement = card.querySelector('h3 a');
+        if (titleElement == null) {
+          continue;
+        }
 
-          String imageUrl = imageElement?.attributes['data-src'] ??
-              imageElement?.attributes['src'] ??
-              '';
+        final articleUrl = normalizeExternalUrl(
+          titleElement.attributes['href'] ?? '',
+          baseUrl: baseUrl,
+        );
+        if (articleUrl == null || !seenUrls.add(articleUrl)) {
+          continue;
+        }
 
-          if (imageUrl.isNotEmpty && imageUrl.startsWith('//')) {
-            imageUrl = 'https:$imageUrl';
-          }
+        final descElement = card.querySelector('.card-section p');
+        final dateElement = card.querySelector('.date');
+        final imageElement = card.querySelector('img');
 
-          String time = '';
-          String category = '';
-          if (dateElement != null) {
-            final dateText = dateElement.text.trim();
-            final parts = dateText.split('|');
-            if (parts.length > 1) {
-              time = parts[0].trim();
-              category = parts[1].trim();
-            } else {
-              time = dateText;
-            }
-          }
+        var imageUrl = imageElement?.attributes['data-src'] ??
+            imageElement?.attributes['src'] ??
+            '';
+        if (imageUrl.startsWith('//')) {
+          imageUrl = 'https:$imageUrl';
+        }
 
-          articles.add(TBSNewsModel(
+        var time = '';
+        var category = '';
+        final dateText = dateElement?.text.trim() ?? '';
+        final parts = dateText.split('|');
+        if (parts.length > 1) {
+          time = parts[0].trim();
+          category = parts[1].trim();
+        } else {
+          time = dateText;
+        }
+
+        articles.add(
+          TBSNewsModel(
             title: titleElement.text.trim(),
             description: descElement?.text.trim() ?? '',
-            articleUrl: '$baseUrl${titleElement.attributes['href'] ?? ''}',
+            articleUrl: articleUrl,
             category: category,
             time: time,
             imageUrl: imageUrl,
-          ));
-        } catch (e) {
-          debugPrint("Error parsing news card: $e");
-        }
+          ),
+        );
+      } catch (error) {
+        debugPrint('Error parsing news card: $error');
       }
-
-      return articles;
-    } else {
-      throw Exception('Failed to load TBS news: ${response.statusCode}');
     }
+
+    return articles;
   }
 }
