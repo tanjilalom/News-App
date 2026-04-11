@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:html/parser.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'package:web_scraping_with_flutter/core/models/news_item.dart';
 import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
 import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
@@ -13,19 +12,19 @@ import 'package:web_scraping_with_flutter/core/widgets/error_state_widget.dart';
 import 'package:web_scraping_with_flutter/core/widgets/loading_shimmer_widget.dart';
 import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 
-// ─── Jugantor (Google News Sitemap) ──────────────────────────────────────────
+// ─── Daily Star Bangla (HTML scraping) ───────────────────────────────────────
 
-/// Uses Jugantor's Google News sitemap (publicly accessible, no 403).
-class JugantorNewsScreen extends StatefulWidget {
-  const JugantorNewsScreen({super.key});
+class DailyStarNewsScreen extends StatefulWidget {
+  const DailyStarNewsScreen({super.key});
 
   @override
-  State<JugantorNewsScreen> createState() => _JugantorNewsScreenState();
+  State<DailyStarNewsScreen> createState() => _DailyStarNewsScreenState();
 }
 
-class _JugantorNewsScreenState extends State<JugantorNewsScreen> {
-  static const _sitemapUrl = 'https://www.jugantor.com/news_sitemap.xml';
-  static const _accentColor = Color(0xFF0066CC);
+class _DailyStarNewsScreenState extends State<DailyStarNewsScreen> {
+  static const _baseUrl = 'https://bangla.thedailystar.net';
+  static const _pageUrl = 'https://bangla.thedailystar.net/news/bangladesh';
+  static const _accentColor = Color(0xFF1565C0);
 
   final http.Client _client = http.Client();
   List<NewsItem> _items = const [];
@@ -45,50 +44,46 @@ class _JugantorNewsScreenState extends State<JugantorNewsScreen> {
     super.dispose();
   }
 
-  String _formatPubDate(String raw) {
-    try {
-      return DateFormat('MMM dd, yyyy – hh:mm a').format(DateTime.parse(raw));
-    } catch (_) {
-      return raw;
-    }
-  }
-
   Future<void> _fetchNews() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
-
     try {
-      final response = await _client
-          .get(Uri.parse(_sitemapUrl))
-          .timeout(const Duration(seconds: 20));
+      final response = await _client.get(Uri.parse(_pageUrl), headers: {
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        'Referer': 'https://bangla.thedailystar.net/',
+      }).timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
 
       final document = parse(utf8.decode(response.bodyBytes));
       final seenLinks = <String>{};
       final items = <NewsItem>[];
 
-      for (final urlEl in document.querySelectorAll('url')) {
-        final loc = urlEl.querySelector('loc')?.text.trim() ?? '';
-        if (loc.isEmpty || !seenLinks.add(loc)) continue;
+      for (final anchor in document.querySelectorAll('a[href*="/news-"]')) {
+        final href = anchor.attributes['href'] ?? '';
+        if (href.isEmpty) continue;
+        final url = href.startsWith('http') ? href : '$_baseUrl$href';
+        final title = TextUtils.cleanText(anchor.text);
+        if (title.length < 8 || !seenLinks.add(url)) continue;
 
-        final rawTitle = urlEl.querySelector('title')?.text.trim() ?? '';
-        final title = TextUtils.cleanText(rawTitle);
-        if (title.length < 4) continue;
-
-        final pubDateRaw =
-            urlEl.querySelector('publication_date, pubdate, lastmod')?.text.trim() ?? '';
-        final time = pubDateRaw.isNotEmpty ? _formatPubDate(pubDateRaw) : '';
-        final category = TextUtils.cleanText(urlEl.querySelector('keywords')?.text ?? '');
-
-        items.add(NewsItem(title: title, url: loc, time: time, category: category));
+        final pathParts = Uri.tryParse(url)?.pathSegments ?? [];
+        String category = '';
+        if (pathParts.length >= 2) {
+          final seg = pathParts[pathParts.length - 2];
+          if (!seg.startsWith('news-') && seg.isNotEmpty) {
+            category = seg.replaceAll('-', ' ');
+          }
+        }
+        items.add(NewsItem(title: title, url: url, category: category));
       }
 
       if (!mounted) return;
       setState(() {
-        _items = items.take(40).toList();
+        _items = items.take(30).toList();
         _lastUpdated = DateTime.now();
         _isLoading = false;
       });
@@ -105,11 +100,11 @@ class _JugantorNewsScreenState extends State<JugantorNewsScreen> {
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: AppColors.background,
         appBar: PortalAppBar(
-          title: Text('যুগান্তর',
-              style: GoogleFonts.notoSansBengali(
-                  fontWeight: FontWeight.w700, fontSize: 22, color: Colors.white)),
-          subtitle: const Text('Jugantor News'),
-          gradientColors: const [Color(0xFF0066CC), Color(0xFF0044AA)],
+          title: Text('Daily Star বাংলা',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700, fontSize: 20, color: Colors.white)),
+          subtitle: const Text('bangla.thedailystar.net'),
+          gradientColors: const [Color(0xFF1565C0), Color(0xFF0D47A1)],
           actions: [
             IconButton(
                 icon: const Icon(Icons.refresh_rounded, color: Colors.white),

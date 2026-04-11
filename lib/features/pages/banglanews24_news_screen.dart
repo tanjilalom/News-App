@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:html/parser.dart';
 import 'package:http/http.dart' as http;
+import 'package:web_scraping_with_flutter/core/models/news_item.dart';
 import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
 import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
 import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
@@ -478,34 +479,6 @@ class _NewsCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class NewsItem {
-  const NewsItem({
-    required this.title,
-    required this.url,
-    required this.time,
-    required this.isPopular,
-  });
-
-  final String title;
-  final String url;
-  final String time;
-  final bool isPopular;
-
-  NewsItem copyWith({
-    String? title,
-    String? url,
-    String? time,
-    bool? isPopular,
-  }) {
-    return NewsItem(
-      title: title ?? this.title,
-      url: url ?? this.url,
-      time: time ?? this.time,
-      isPopular: isPopular ?? this.isPopular,
     );
   }
 }

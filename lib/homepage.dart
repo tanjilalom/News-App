@@ -6,10 +6,13 @@ import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 import 'package:web_scraping_with_flutter/features/pages/bajus_prices_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/banglanews24_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/business_standard_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/daily_star_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/ittefaq_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/jugantor_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/kalerkontho_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/manabzamin_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/prothomalo_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/samakal_news_screen.dart';
 
 // ─── Category enum ──────────────────────────────────────────────────────────
 
