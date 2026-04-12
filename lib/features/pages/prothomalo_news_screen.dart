@@ -8,8 +8,9 @@ import 'package:web_scraping_with_flutter/core/models/news_item.dart';
 import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
 import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
 import 'package:web_scraping_with_flutter/core/utils/text_utils.dart';
+import 'package:web_scraping_with_flutter/core/widgets/news_list_tile.dart';
 import 'package:web_scraping_with_flutter/core/widgets/error_state_widget.dart';
-import 'package:web_scraping_with_flutter/core/widgets/loading_shimmer_widget.dart';
+import 'package:web_scraping_with_flutter/core/widgets/shimmer_loader.dart';
 import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 
 /// Uses Prothom Alo's public REST API:
@@ -157,7 +158,7 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
 
   Widget _buildBody() {
     if (_isLoading && _items.isEmpty) {
-      return const LoadingShimmerWidget();
+      return const ShimmerLoader();
     }
     if (_hasError && _items.isEmpty) {
       return ErrorStateWidget(
@@ -177,163 +178,22 @@ class _ProthomAloNewsScreenState extends State<ProthomAloNewsScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           if (_lastUpdated != null && index == 0) {
-            return _UpdatedChip(
-              timestamp: TextUtils.formatTimestamp(_lastUpdated!),
+            return UpdatedChip(
+              timestamp: _lastUpdated!,
               count: _items.length,
             );
           }
           final item = _items[_lastUpdated != null ? index - 1 : index];
-          return _ProthomAloCard(
+          return NewsListTile(
             item: item,
             onTap: () => openExternalLink(context, item.url),
+            accentColor: _accentColor,
+            bengaliFont: true,
+            showDescription: item.description.isNotEmpty,
+            onShare: () => NewsListTile.shareArticle(item.url, title: item.title),
           );
         },
       ),
-    );
-  }
-}
-
-// ─── Card ───────────────────────────────────────────────────────────────────
-
-class _ProthomAloCard extends StatelessWidget {
-  const _ProthomAloCard({required this.item, required this.onTap});
-
-  final NewsItem item;
-  final VoidCallback onTap;
-
-  static const _accent = Color(0xFFE51A1B);
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: const Border(
-            left: BorderSide(color: _accent, width: 4),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (item.category.isNotEmpty) ...[
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  item.category,
-                  style: GoogleFonts.notoSansBengali(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: _accent,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            Text(
-              item.title,
-              style: GoogleFonts.notoSansBengali(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-                height: 1.4,
-              ),
-            ),
-            if (item.description.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                item.description,
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                if (item.time.isNotEmpty) ...[
-                  Icon(Icons.access_time_rounded,
-                      size: 13, color: Colors.grey[500]),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      item.time,
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ] else
-                  const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'পড়ুন',
-                        style: GoogleFonts.notoSansBengali(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _accent,
-                        ),
-                      ),
-                      const SizedBox(width: 3),
-                      const Icon(Icons.arrow_forward_ios_rounded,
-                          size: 10, color: _accent),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _UpdatedChip extends StatelessWidget {
-  const _UpdatedChip({required this.timestamp, required this.count});
-  final String timestamp;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(Icons.update_rounded, size: 14, color: Colors.grey[500]),
-        const SizedBox(width: 6),
-        Text('Updated $timestamp',
-            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
-        const Spacer(),
-        Text('$count articles',
-            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
-      ],
     );
   }
 }

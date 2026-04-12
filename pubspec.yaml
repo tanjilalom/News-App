@@ -1,8 +1,8 @@
 name: web_scraping_with_flutter
-description: A Flutter news web scraping app with modern dependencies.
+description: A modern Flutter news aggregation app with real-time scraping, offline caching, and multi-portal support.
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 2.0.0+1
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -15,22 +15,38 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^6.3.2
 
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
   # HTTP & Parsing
   http: ^1.2.2
   html: ^0.15.4
+
+  # Local Storage & Caching
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
 
   # Utilities
   intl: ^0.20.2
   cached_network_image: ^3.4.1
   url_launcher: ^6.3.1
+  collection: ^1.18.0
 
-  # Remove win32 unless you're building for Windows desktop
-  # win32: ^5.10.1   # <-- Comment or delete this line if not needed
+  # Sharing
+  share_plus: ^10.1.4
+
+  # Search & Filtering
+  fuzzywuzzy: ^1.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+
+  # Code Generation
+  build_runner: ^2.4.14
+  riverpod_generator: ^2.4.0
 
   flutter_launcher_icons: ^0.14.4
   change_app_package_name: ^1.2.0

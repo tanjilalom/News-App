@@ -7,7 +7,10 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
 import 'package:web_scraping_with_flutter/core/utils/external_link_opener.dart';
+import 'package:web_scraping_with_flutter/core/widgets/news_list_tile.dart';
 import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
+import 'package:web_scraping_with_flutter/core/widgets/shimmer_loader.dart';
+import 'package:web_scraping_with_flutter/core/models/news_item.dart';
 
 class KalerKonthoNewsScreen extends StatefulWidget {
   const KalerKonthoNewsScreen({super.key});
@@ -22,7 +25,7 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
   final http.Client _client = http.Client();
   final String _channelTitle = 'Kaler Kantho News';
 
-  List<_RssNewsItem> _items = const [];
+  List<NewsItem> _items = const [];
   bool _isLoading = true;
   bool _hasError = false;
   DateTime? _lastUpdated;
@@ -58,7 +61,7 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
 
       final document = parse(utf8.decode(response.bodyBytes));
       final seenLinks = <String>{};
-      final items = <_RssNewsItem>[];
+      final items = <NewsItem>[];
 
       for (final element in document.querySelectorAll('item')) {
         final rawLink = element.querySelector('link')?.text.trim() ?? '';
@@ -70,10 +73,10 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
         }
 
         items.add(
-          _RssNewsItem(
+          NewsItem(
             title: element.querySelector('title')?.text.trim() ?? 'No Title',
-            pubDate: _formatDate(element.querySelector('pubDate')?.text),
-            link: link,
+            url: link,
+            time: _formatDate(element.querySelector('pubDate')?.text),
             description:
                 _cleanText(element.querySelector('description')?.text ?? ''),
           ),
@@ -149,9 +152,7 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF3366FF)),
-            )
+          ? const ShimmerLoader()
           : _hasError
               ? _buildErrorUI()
               : RefreshIndicator(
@@ -161,25 +162,9 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
                     slivers: [
                       if (_lastUpdated != null)
                         SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.update,
-                                  size: 16,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Updated ${DateFormat('MMM dd, hh:mm a').format(_lastUpdated!)}',
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.grey[600],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          child: UpdatedChip(
+                            timestamp: _lastUpdated!,
+                            count: _items.length,
                           ),
                         ),
                       SliverPadding(
@@ -188,11 +173,15 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
                           itemCount: _items.length,
                           itemBuilder: (context, index) {
                             final item = _items[index];
-                            return _NewsCard(
-                              title: item.title,
-                              date: item.pubDate,
-                              description: item.description,
-                              onTap: () => _openNews(item.link),
+                            return NewsListTile(
+                              item: item,
+                              onTap: () => _openNews(item.url),
+                              accentColor: const Color(0xFF3B82F6),
+                              bengaliFont: false,
+                              onShare: () => NewsListTile.shareArticle(
+                                item.url,
+                                title: item.title,
+                              ),
                             );
                           },
                         ),
@@ -237,125 +226,6 @@ class _KalerKonthoNewsScreenState extends State<KalerKonthoNewsScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _RssNewsItem {
-  const _RssNewsItem({
-    required this.title,
-    required this.pubDate,
-    required this.link,
-    required this.description,
-  });
-
-  final String title;
-  final String pubDate;
-  final String link;
-  final String description;
-}
-
-class _NewsCard extends StatelessWidget {
-  const _NewsCard({
-    required this.title,
-    required this.date,
-    required this.description,
-    required this.onTap,
-  });
-
-  final String title;
-  final String date;
-  final String description;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            if (description.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                const SizedBox(width: 6),
-                Text(
-                  date,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF7367F0).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Read',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF7367F0),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.arrow_forward,
-                        size: 14,
-                        color: Color(0xFF7367F0),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

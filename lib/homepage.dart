@@ -1,188 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:web_scraping_with_flutter/core/config/portals.dart';
 import 'package:web_scraping_with_flutter/core/theme/app_theme.dart';
 import 'package:web_scraping_with_flutter/core/widgets/portal_app_bar.dart';
 import 'package:web_scraping_with_flutter/features/pages/bajus_prices_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/banglanews24_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/banglatribune_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/bdnews24_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/business_standard_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/daily_star_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/dailyinqilab_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/dhakapost_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/dhakatribune_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/ittefaq_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/jagonews24_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/jugantor_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/kalerkontho_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/manabzamin_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/newagebd_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/prothomalo_news_screen.dart';
 import 'package:web_scraping_with_flutter/features/pages/samakal_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/pages/somoynews_news_screen.dart';
+import 'package:web_scraping_with_flutter/features/providers/news_providers.dart';
+import 'package:web_scraping_with_flutter/features/search_screen.dart';
 
-// ─── Category enum ──────────────────────────────────────────────────────────
+// ─── Page builder registry ───────────────────────────────────────────────────
 
-enum _Category { all, bangla, english, finance }
-
-extension _CategoryLabel on _Category {
-  String get label {
-    switch (this) {
-      case _Category.all:
-        return 'All';
-      case _Category.bangla:
-        return 'বাংলা';
-      case _Category.english:
-        return 'English';
-      case _Category.finance:
-        return 'Finance';
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case _Category.all:
-        return Icons.grid_view_rounded;
-      case _Category.bangla:
-        return Icons.language_rounded;
-      case _Category.english:
-        return Icons.abc_rounded;
-      case _Category.finance:
-        return Icons.monetization_on_rounded;
-    }
-  }
-}
-
-// ─── Portal entry model ──────────────────────────────────────────────────────
-
-class _PortalEntry {
-  const _PortalEntry({
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.gradientColors,
-    required this.category,
-    required this.pageBuilder,
-  });
-
-  final String title;
-  final String description;
-  final IconData icon;
-  final List<Color> gradientColors;
-  final _Category category;
-  final WidgetBuilder pageBuilder;
-}
-
-// ─── Portal registry ─────────────────────────────────────────────────────────
-
-const List<_PortalEntry> _allPortals = [
-  // Finance
-  _PortalEntry(
-    title: 'Bajus Gold & Silver',
-    description: 'Live gold & silver prices',
-    icon: Icons.monetization_on_rounded,
-    gradientColors: [Color(0xFFF59E0B), Color(0xFFEF4444)],
-    category: _Category.finance,
-    pageBuilder: _buildBajusPage,
-  ),
-  // Bangla news
-  _PortalEntry(
-    title: 'Kaler Kantho',
-    description: 'কালের কণ্ঠ — Latest from RSS',
-    icon: Icons.newspaper_rounded,
-    gradientColors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-    category: _Category.bangla,
-    pageBuilder: _buildKalerKonthoPage,
-  ),
-  _PortalEntry(
-    title: 'Prothom Alo',
-    description: 'প্রথম আলো — Top stories',
-    icon: Icons.article_rounded,
-    gradientColors: [Color(0xFFE51A1B), Color(0xFFC62828)],
-    category: _Category.bangla,
-    pageBuilder: _buildProthomAloPage,
-  ),
-  _PortalEntry(
-    title: 'Bangla News 24',
-    description: 'বাংলানিউজ২৪ — Breaking news',
-    icon: Icons.rss_feed_rounded,
-    gradientColors: [Color(0xFF1E88E5), Color(0xFF00ACC1)],
-    category: _Category.bangla,
-    pageBuilder: _buildBanglaNews24Page,
-  ),
-  _PortalEntry(
-    title: 'Ittefaq',
-    description: 'ইত্তেফাক — Latest news',
-    icon: Icons.feed_rounded,
-    gradientColors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
-    category: _Category.bangla,
-    pageBuilder: _buildIttefaqPage,
-  ),
-  _PortalEntry(
-    title: 'TBS News বাংলা',
-    description: 'The Business Standard',
-    icon: Icons.business_center_rounded,
-    gradientColors: [Color(0xFF059669), Color(0xFF065F46)],
-    category: _Category.bangla,
-    pageBuilder: _buildTbsPage,
-  ),
-  _PortalEntry(
-    title: 'Jugantor',
-    description: 'যুগান্তর — National & World',
-    icon: Icons.public_rounded,
-    gradientColors: [Color(0xFF0066CC), Color(0xFF0044AA)],
-    category: _Category.bangla,
-    pageBuilder: _buildJugantorPage,
-  ),
-  _PortalEntry(
-    title: 'Samakal',
-    description: 'সমকাল — Current affairs',
-    icon: Icons.newspaper_rounded,
-    gradientColors: [Color(0xFF00897B), Color(0xFF00695C)],
-    category: _Category.bangla,
-    pageBuilder: _buildSamakalPage,
-  ),
-  _PortalEntry(
-    title: 'Manabzamin',
-    description: 'মানবজমিন — In-depth news',
-    icon: Icons.article_rounded,
-    gradientColors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
-    category: _Category.bangla,
-    pageBuilder: _buildManabzaminPage,
-  ),
-  // English news
-  _PortalEntry(
-    title: 'The Daily Star',
-    description: 'English — Top stories',
-    icon: Icons.star_rounded,
-    gradientColors: [Color(0xFF1565C0), Color(0xFF0D47A1)],
-    category: _Category.english,
-    pageBuilder: _buildDailyStarPage,
-  ),
-];
-
-// ─── Page builder functions ───────────────────────────────────────────────────
-
-Widget _buildBajusPage(BuildContext context) => const BajusRateScreen();
-Widget _buildKalerKonthoPage(BuildContext context) =>
-    const KalerKonthoNewsScreen();
-Widget _buildProthomAloPage(BuildContext context) =>
-    const ProthomAloNewsScreen();
-Widget _buildBanglaNews24Page(BuildContext context) =>
-    const BanglaNews24Screen();
-Widget _buildIttefaqPage(BuildContext context) => const IttefaqNewsScreen();
-Widget _buildTbsPage(BuildContext context) => const TBSNewsScreen();
-Widget _buildJugantorPage(BuildContext context) => const JugantorNewsScreen();
-Widget _buildSamakalPage(BuildContext context) => const SamakalNewsScreen();
-Widget _buildManabzaminPage(BuildContext context) =>
-    const ManabzaminNewsScreen();
-Widget _buildDailyStarPage(BuildContext context) => const DailyStarNewsScreen();
+final Map<String, WidgetBuilder> _pageBuilders = {
+  'bajus': (_) => const BajusRateScreen(),
+  'kalerkantho': (_) => const KalerKonthoNewsScreen(),
+  'prothomalo': (_) => const ProthomAloNewsScreen(),
+  'banglanews24': (_) => const BanglaNews24Screen(),
+  'ittefaq': (_) => const IttefaqNewsScreen(),
+  'tbsnews': (_) => const TBSNewsScreen(),
+  'jugantor': (_) => const JugantorNewsScreen(),
+  'samakal': (_) => const SamakalNewsScreen(),
+  'manabzamin': (_) => const ManabzaminNewsScreen(),
+  'bdnews24': (_) => const Bdnews24Screen(),
+  'jagonews24': (_) => const JagoNews24Screen(),
+  'somoynews': (_) => const SomoyNewsScreen(),
+  'banglatribune': (_) => const BanglaTribuneScreen(),
+  'dhakapost': (_) => const DhakaPostScreen(),
+  'dailyinqilab': (_) => const DailyInqilabScreen(),
+  'dailystar': (_) => const DailyStarNewsScreen(),
+  'dhakatribune': (_) => const DhakaTribuneScreen(),
+  'newagebd': (_) => const NewAgeScreen(),
+};
 
 // ─── HomePage ─────────────────────────────────────────────────────────────────
 
-class HomePage extends StatefulWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage>
+class _HomePageState extends ConsumerState<HomePage>
     with SingleTickerProviderStateMixin {
-  _Category _selectedCategory = _Category.all;
+  PortalCategory _selectedCategory = PortalCategory.all;
   late final AnimationController _headerController;
   late final Animation<double> _headerFade;
 
@@ -205,11 +83,8 @@ class _HomePageState extends State<HomePage>
     super.dispose();
   }
 
-  List<_PortalEntry> get _filteredPortals => _selectedCategory == _Category.all
-      ? _allPortals
-      : _allPortals
-          .where((p) => p.category == _selectedCategory)
-          .toList(growable: false);
+  List<PortalConfig> get _filteredPortals =>
+      PortalRegistry.byCategory(_selectedCategory);
 
   void _navigateWithSlide(BuildContext context, Widget page) {
     Navigator.push(
@@ -228,6 +103,29 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  void _openSearch() {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (_, __, ___) => const SearchScreen(),
+        transitionsBuilder: (_, animation, __, child) {
+          final fade = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOut,
+          );
+          return FadeTransition(opacity: fade, child: child);
+        },
+      ),
+    );
+  }
+
+  void _toggleTheme() {
+    final current = ref.read(themeModeProvider);
+    ref.read(themeModeProvider.notifier).state =
+        current == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -236,6 +134,7 @@ class _HomePageState extends State<HomePage>
     ));
 
     final portals = _filteredPortals;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -250,30 +149,39 @@ class _HomePageState extends State<HomePage>
           ),
         ),
         subtitle: const Text('আপনার সংবাদ কেন্দ্র'),
+        actions: [
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              color: Colors.white,
+            ),
+            onPressed: _toggleTheme,
+            tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+          ),
+          IconButton(
+            icon: const Icon(Icons.search_rounded, color: Colors.white),
+            onPressed: _openSearch,
+            tooltip: 'Search all portals',
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // ── Hero header ──────────────────────────────────────────────
           FadeTransition(
             opacity: _headerFade,
-            child: _HeroHeader(totalPortals: _allPortals.length),
+            child: _HeroHeader(totalPortals: PortalRegistry.all.length),
           ),
-
-          // ── Category filter chips ────────────────────────────────────
           _CategoryFilterRow(
             selected: _selectedCategory,
             onChanged: (c) => setState(() => _selectedCategory = c),
           ),
-
-          // ── Portal grid ──────────────────────────────────────────────
           Expanded(
             child: portals.isEmpty
                 ? _EmptyCategory(category: _selectedCategory)
                 : GridView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     physics: const BouncingScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       mainAxisSpacing: 14,
                       crossAxisSpacing: 14,
@@ -281,13 +189,16 @@ class _HomePageState extends State<HomePage>
                     ),
                     itemCount: portals.length,
                     itemBuilder: (context, index) {
+                      final entry = portals[index];
                       return _PortalCard(
-                        entry: portals[index],
+                        entry: entry,
                         index: index,
-                        onTap: () => _navigateWithSlide(
-                          context,
-                          portals[index].pageBuilder(context),
-                        ),
+                        onTap: () {
+                          final builder = _pageBuilders[entry.id];
+                          if (builder != null) {
+                            _navigateWithSlide(context, builder(context));
+                          }
+                        },
                       );
                     },
                   ),
@@ -313,6 +224,7 @@ class _HeroHeader extends StatelessWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     final dateStr = '${months[now.month - 1]} ${now.day}, ${now.year}';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -342,7 +254,7 @@ class _HeroHeader extends StatelessWidget {
                   'Good ${_greeting()}, Reader!',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
-                    color: Colors.white.withValues(alpha: 0.75),
+                    color: Colors.white.withValues(alpha: isDark ? 0.9 : 0.75),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -359,7 +271,7 @@ class _HeroHeader extends StatelessWidget {
                   dateStr,
                   style: GoogleFonts.poppins(
                     fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.6),
+                    color: Colors.white.withValues(alpha: isDark ? 0.8 : 0.6),
                   ),
                 ),
               ],
@@ -389,7 +301,8 @@ class _HeroHeader extends StatelessWidget {
                   'Portals',
                   style: GoogleFonts.poppins(
                     fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.65),
+                    color: Colors.white.withValues(
+                        alpha: isDark ? 0.85 : 0.65),
                   ),
                 ),
               ],
@@ -416,17 +329,20 @@ class _CategoryFilterRow extends StatelessWidget {
     required this.onChanged,
   });
 
-  final _Category selected;
-  final ValueChanged<_Category> onChanged;
+  final PortalCategory selected;
+  final ValueChanged<PortalCategory> onChanged;
 
   @override
   Widget build(BuildContext context) {
+    final surface = Theme.of(context).cardColor;
+    final divider = Theme.of(context).dividerColor;
+
     return SizedBox(
       height: 52,
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         scrollDirection: Axis.horizontal,
-        children: _Category.values.map((cat) {
+        children: PortalCategory.values.map((cat) {
           final isSelected = cat == selected;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -440,9 +356,7 @@ class _CategoryFilterRow extends StatelessWidget {
                     Icon(
                       cat.icon,
                       size: 14,
-                      color: isSelected
-                          ? Colors.white
-                          : AppColors.textSecondary,
+                      color: isSelected ? Colors.white : AppColors.textSecondary,
                     ),
                     const SizedBox(width: 4),
                     Text(cat.label),
@@ -450,24 +364,20 @@ class _CategoryFilterRow extends StatelessWidget {
                 ),
                 labelStyle: GoogleFonts.poppins(
                   fontSize: 12,
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected ? Colors.white : AppColors.textSecondary,
                 ),
-                backgroundColor: Colors.white,
+                backgroundColor: surface,
                 selectedColor: AppColors.primary,
                 checkmarkColor: Colors.transparent,
                 side: BorderSide(
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.divider,
+                  color: isSelected ? AppColors.primary : divider,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
                 elevation: isSelected ? 2 : 0,
-                shadowColor:
-                    AppColors.primary.withValues(alpha: 0.3),
+                shadowColor: AppColors.primary.withValues(alpha: 0.3),
                 onSelected: (_) => onChanged(cat),
               ),
             ),
@@ -487,7 +397,7 @@ class _PortalCard extends StatefulWidget {
     required this.onTap,
   });
 
-  final _PortalEntry entry;
+  final PortalConfig entry;
   final int index;
   final VoidCallback onTap;
 
@@ -514,8 +424,6 @@ class _PortalCardState extends State<_PortalCard>
     _scaleAnim = Tween<double>(begin: 0.95, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
-
-    // Entrance stagger animation
     _entranceAnim = CurvedAnimation(
       parent: _controller,
       curve: const Interval(0, 1, curve: Curves.easeOut),
@@ -573,7 +481,6 @@ class _PortalCardState extends State<_PortalCard>
           ),
           child: Stack(
             children: [
-              // Decorative circle
               Positioned(
                 right: -18,
                 top: -18,
@@ -598,8 +505,6 @@ class _PortalCardState extends State<_PortalCard>
                   ),
                 ),
               ),
-
-              // Content
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -612,11 +517,7 @@ class _PortalCardState extends State<_PortalCard>
                         color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        entry.icon,
-                        color: Colors.white,
-                        size: 24,
-                      ),
+                      child: Icon(entry.icon, color: Colors.white, size: 24),
                     ),
                     const Spacer(),
                     Text(
@@ -666,11 +567,8 @@ class _PortalCardState extends State<_PortalCard>
                                 ),
                               ),
                               const SizedBox(width: 3),
-                              const Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 10,
-                                color: Colors.white,
-                              ),
+                              const Icon(Icons.arrow_forward_ios_rounded,
+                                  size: 10, color: Colors.white),
                             ],
                           ),
                         ),
@@ -692,7 +590,7 @@ class _PortalCardState extends State<_PortalCard>
 class _EmptyCategory extends StatelessWidget {
   const _EmptyCategory({required this.category});
 
-  final _Category category;
+  final PortalCategory category;
 
   @override
   Widget build(BuildContext context) {
