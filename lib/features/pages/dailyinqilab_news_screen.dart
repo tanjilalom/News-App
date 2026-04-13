@@ -20,7 +20,7 @@ class DailyInqilabScreen extends StatefulWidget {
 }
 
 class _DailyInqilabScreenState extends State<DailyInqilabScreen> {
-  static const _baseUrl = 'https://www.dailyinqilab.com';
+  static const _baseUrl = 'https://dailyinqilab.com/national';
   static const _accentColor = Color(0xFF00695C);
 
   final http.Client _client = http.Client();
@@ -30,18 +30,30 @@ class _DailyInqilabScreenState extends State<DailyInqilabScreen> {
   DateTime? _lastUpdated;
 
   @override
-  void initState() { super.initState(); _fetchNews(); }
+  void initState() {
+    super.initState();
+    _fetchNews();
+  }
+
   @override
-  void dispose() { _client.close(); super.dispose(); }
+  void dispose() {
+    _client.close();
+    super.dispose();
+  }
 
   Future<void> _fetchNews() async {
     if (!mounted) return;
-    setState(() { _isLoading = true; _hasError = false; });
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
     try {
       final response = await _client.get(Uri.parse(_baseUrl), headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
       }).timeout(const Duration(seconds: 20));
-      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+      if (response.statusCode != 200)
+        throw Exception('HTTP ${response.statusCode}');
 
       final document = parse(utf8.decode(response.bodyBytes));
       final seen = <String>{};
@@ -54,7 +66,10 @@ class _DailyInqilabScreenState extends State<DailyInqilabScreen> {
         final title = TextUtils.cleanText(anchor.text);
         if (title.length < 10 || !seen.add(url)) continue;
         final timeEl = anchor.parent?.querySelector('time, .time, .date');
-        items.add(NewsItem(title: title, url: url, time: TextUtils.cleanText(timeEl?.text ?? '')));
+        items.add(NewsItem(
+            title: title,
+            url: url,
+            time: TextUtils.cleanText(timeEl?.text ?? '')));
       }
 
       if (!mounted) return;
@@ -65,7 +80,10 @@ class _DailyInqilabScreenState extends State<DailyInqilabScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() { _hasError = true; _isLoading = false; });
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+      });
     }
   }
 
@@ -75,7 +93,9 @@ class _DailyInqilabScreenState extends State<DailyInqilabScreen> {
         appBar: PortalAppBar(
           title: Text('দৈনিক ইনকিলাব',
               style: GoogleFonts.notoSansBengali(
-                  fontWeight: FontWeight.w700, fontSize: 22, color: Colors.white)),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 22,
+                  color: Colors.white)),
           subtitle: const Text('dailyinqilab.com'),
           gradientColors: const [Color(0xFF00695C), Color(0xFF004D40)],
           actions: [
@@ -97,7 +117,8 @@ class _DailyInqilabScreenState extends State<DailyInqilabScreen> {
       color: _accentColor,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics()),
         itemCount: _items.length + (_lastUpdated != null ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (ctx, i) {
@@ -106,9 +127,12 @@ class _DailyInqilabScreenState extends State<DailyInqilabScreen> {
           }
           final item = _items[_lastUpdated != null ? i - 1 : i];
           return NewsListTile(
-              item: item, accentColor: _accentColor, bengaliFont: true,
+              item: item,
+              accentColor: _accentColor,
+              bengaliFont: true,
               onTap: () => openExternalLink(ctx, item.url),
-              onShare: () => NewsListTile.shareArticle(item.url, title: item.title));
+              onShare: () =>
+                  NewsListTile.shareArticle(item.url, title: item.title));
         },
       ),
     );
