@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
 </p>
 
-<p align="center">
+<p align="center">  
 A modern Flutter news aggregation app that fetches real-time news from <strong>18 Bangladeshi portals</strong> 
 (14 বাংলা + 3 English + 1 finance), featuring offline caching, cross-portal search, and dark mode.
 </p>
