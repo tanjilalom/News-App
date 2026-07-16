@@ -12,13 +12,6 @@ A modern Flutter news aggregation app that fetches real-time news from <strong>1
 (14 বাংলা + 3 English + 1 finance), featuring offline caching, cross-portal search, and dark mode.
 </p>
 
-<p align="center">
-  <img src="screenshots/image1.png" width="200" alt="Home Screen"/>
-  <img src="screenshots/image2.png" width="200" alt="Gold Prices"/>
-  <img src="screenshots/image3.png" width="200" alt="News List"/>
-  <img src="screenshots/image4.png" width="200" alt="Dark Mode"/>
-</p>
-
 ---
 
 ## ✨ Features
